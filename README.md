@@ -17,12 +17,12 @@ A production-grade harness for LLM agents with context engineering, prompt engin
 <br />
 
 ```
-  ███████╗██╗  ██╗ █████╗ ██████╗  ██████╗
+  ███████╗██╗  ██╗ █████╗ ██████╗  ██████╗ 
   ██╔════╝██║  ██║██╔══██╗██╔══██╗██╔═══██╗
-  ███████╗███████║███████║██║██║  ██║██║█  
-  ╚════██║██╔══██║██╔══██║██║  ██║██║   
-  ███████║██║  ██║██║  ██║██   ██╔██╔
-  ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝  ╚╝  
+  ███████╗███████║███████║██║  ██║██║   ██║
+  ╚════██║██╔══██║██╔══██║██║  ██║██║   ██║
+  ███████║██║  ██║██║  ██║██████╔╝╚██████╔╝
+  ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚═════╝  ╚═════╝ 
 ```
 
 **Context → Prompt → Execute → Validate → Retry → Respond**
@@ -33,10 +33,10 @@ A production-grade harness for LLM agents with context engineering, prompt engin
 
 ## Why SHARP?
 
-Most LLM agent frameworks give you a prompt and hope for the best. SHARP treats the **entire pipeline** as an engineered system — curating context, composing prompts, executing with tools, validating output, and retrying with feedback until it passes.
+Most LLM agent frameworks give you a prompt and hope for the best. SHARP treats the **entire pipeline** as an engineered system — curating context, composing prompts, executing with tools, validating responses, and retrying with feedback.
 
 ```
-┌──────────────────────────────────────────────────────────────────────────────┐
+┌─────────────────────────────────────────────────────────────────────────────┐
 │                              SHARP Pipeline                                  │
 │                                                                              │
 │   User Request                                                               │
@@ -57,7 +57,7 @@ Most LLM agent frameworks give you a prompt and hope for the best. SHARP treats 
 │       └──────────────│  RETRY   │◀── feedback ────────┘                     │
 │                      │  engine  │   (mutate context)                        │
 │                      └──────────┘                                           │
-└──────────────────────────────────────────────────────────────────────────────┘
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
