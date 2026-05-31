@@ -1,0 +1,94 @@
+# SHARP Configuration - System for Harnessing Augmented Reasoning and Transforming Heuristics
+
+llm:
+  provider: openai
+  model: gpt-4o
+  temperature: 0.7
+  max_tokens: 4096
+  timeout: 60.0
+
+context:
+  total_token_budget: 8000
+  compression_threshold: 0.8
+  dedup_threshold: 0.85
+  layers: []
+
+prompt:
+  system_prompt_template: default
+  include_tools_in_prompt: true
+  include_memory_in_prompt: true
+  max_context_tokens: 6000
+  reserved_output_tokens: 2000
+
+tools:
+  max_output_tokens: 2000
+  blocked_tools: []
+  require_approval_for:
+    - execute
+    - critical
+
+validation:
+  enabled: true
+  level: strict
+  llm_judge_enabled: true
+  llm_judge_model: gpt-4o-mini
+  min_score: 0.7
+  max_retries: 3
+  rules: []
+
+safety:
+  circuit_breaker_enabled: true
+  failure_threshold: 5
+  recovery_seconds: 60.0
+  budget_enabled: true
+  max_cost_usd: 10.0
+  max_tokens: 100000
+  blocked_commands:
+    - rm -rf
+    - sudo
+  approval_mode: risky_only
+
+state:
+  enabled: true
+  backend: file
+  checkpoint_dir: .harness/checkpoints
+  session_ttl: 3600
+
+observability:
+  tracing_enabled: false
+  metrics_enabled: true
+  logging_level: INFO
+  otlp_endpoint: null
+  log_file: null
+
+execution:
+  loop_strategy: react
+  max_iterations: 10
+  timeout: 120.0
+
+mcp:
+  enabled: true
+  auto_discover: true
+  connect_timeout: 30.0
+  retry_attempts: 3
+  retry_delay: 1.0
+  tool_risk_overrides: {}
+  servers:
+    - name: filesystem
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "./"]
+      transport: stdio
+      enabled: false
+      description: "Read/write local filesystem files"
+    - name: github
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-github"]
+      transport: stdio
+      enabled: false
+      description: "GitHub API access (repos, issues, PRs)"
+    - name: postgres
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-postgres"]
+      transport: stdio
+      enabled: false
+      description: "PostgreSQL database access"
