@@ -55,8 +55,9 @@ class MetricsCollector:
         latency_ms: float = 0.0,
         tokens: int = 0,
         cost: float = 0.0,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
-        """End tracking a trace."""
+        """End tracking a trace and record token/cost data."""
         if trace_id not in self._traces:
             return
 
@@ -66,6 +67,8 @@ class MetricsCollector:
         trace.success = success
         trace.tokens_used = tokens
         trace.cost_usd = cost
+        if metadata:
+            trace.metadata.update(metadata)
 
         # Update aggregates
         self._aggregate["total_traces"] += 1

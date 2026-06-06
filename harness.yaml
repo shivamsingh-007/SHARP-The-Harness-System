@@ -1,17 +1,31 @@
-# SHARP Configuration - System for Harnessing Augmented Reasoning and Transforming Heuristics
+# SHARP Configuration
+# System for Harnessing Augmented Reasoning and Transforming Heuristics
 
 llm:
   provider: openai
   model: gpt-4o
+  api_key: "${OPENROUTER_API_KEY}"  # Set via environment variable
+  api_base: "https://openrouter.ai/api/v1"
   temperature: 0.7
-  max_tokens: 4096
+  max_tokens: 2048
   timeout: 60.0
 
 context:
   total_token_budget: 8000
   compression_threshold: 0.8
   dedup_threshold: 0.85
-  layers: []
+  layers:
+    - name: opencode_session
+      source: opencode_context
+      source_type: callable
+      priority: 0
+      disclosure_level: index
+      keywords: [opencode, code, edit, file, search]
+    - name: project_memory
+      source: .harness/memory.md
+      source_type: file
+      priority: 1
+      disclosure_level: detail
 
 prompt:
   system_prompt_template: default
@@ -22,7 +36,12 @@ prompt:
 
 tools:
   max_output_tokens: 2000
-  blocked_tools: []
+  blocked_tools:
+    - rm -rf
+    - sudo rm
+    - mkfs
+    - dd if=
+    - format
   require_approval_for:
     - execute
     - critical
@@ -46,6 +65,8 @@ safety:
   blocked_commands:
     - rm -rf
     - sudo
+    - mkfs
+    - dd if=
   approval_mode: risky_only
 
 state:
@@ -55,7 +76,7 @@ state:
   session_ttl: 3600
 
 observability:
-  tracing_enabled: false
+  tracing_enabled: true
   metrics_enabled: true
   logging_level: INFO
   otlp_endpoint: null
@@ -69,26 +90,4 @@ execution:
 mcp:
   enabled: true
   auto_discover: true
-  connect_timeout: 30.0
-  retry_attempts: 3
-  retry_delay: 1.0
-  tool_risk_overrides: {}
-  servers:
-    - name: filesystem
-      command: npx
-      args: ["-y", "@modelcontextprotocol/server-filesystem", "./"]
-      transport: stdio
-      enabled: false
-      description: "Read/write local filesystem files"
-    - name: github
-      command: npx
-      args: ["-y", "@modelcontextprotocol/server-github"]
-      transport: stdio
-      enabled: false
-      description: "GitHub API access (repos, issues, PRs)"
-    - name: postgres
-      command: npx
-      args: ["-y", "@modelcontextprotocol/server-postgres"]
-      transport: stdio
-      enabled: false
-      description: "PostgreSQL database access"
+  servers: []

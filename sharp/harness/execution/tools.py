@@ -65,6 +65,18 @@ class ToolRegistry:
 
         return True
 
+    def _check_blocked_commands(self, arguments: dict[str, Any]) -> str | None:
+        """Check if any argument contains a blocked command pattern.
+
+        Returns:
+            The blocked command pattern if found, else None.
+        """
+        for blocked in self.config.blocked_tools:
+            for key, value in arguments.items():
+                if isinstance(value, str) and blocked in value:
+                    return blocked
+        return None
+
     async def execute(self, tool_name: str, arguments: dict[str, Any]) -> ToolResult:
         """Execute a tool with governance checks."""
         tool = self._tools.get(tool_name)
@@ -77,6 +89,17 @@ class ToolRegistry:
             )
 
         func, definition = tool
+
+        # Check for blocked commands in arguments
+        blocked = self._check_blocked_commands(arguments)
+        if blocked:
+            logger.warning(f"Blocked command detected: '{blocked}' in tool '{tool_name}'")
+            return ToolResult(
+                tool_name=tool_name,
+                success=False,
+                output="",
+                error=f"Blocked command '{blocked}' is not allowed",
+            )
 
         # Permission check
         if not self.check_permission(tool_name):

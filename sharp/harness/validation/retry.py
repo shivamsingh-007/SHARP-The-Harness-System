@@ -2,24 +2,12 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-
 from sharp.harness.core.config import ValidationConfig
 from sharp.harness.core.types import ValidationResult
+from sharp.harness.prompt.composer import AugmentedPrompt
 from sharp.harness.observability.logging import get_logger
 
 logger = get_logger(__name__)
-
-
-@dataclass
-class AugmentedPrompt:
-    """Placeholder for augmented prompt (imported from prompt.composer)."""
-
-    system_prompt: str
-    user_message: str
-    context_summary: str
-    total_tokens: int = 0
-    sections: dict | None = None
 
 
 class RetryEngine:

@@ -24,7 +24,7 @@ class ResponseValidator:
         self.rule_validator = RuleBasedValidator()
         self.llm_judge = LLMJudge(config)
 
-    def validate(
+    async def validate(
         self,
         response: str,
         user_request: str,
@@ -50,30 +50,12 @@ class ResponseValidator:
 
         # Phase 2: LLM judge (if enabled and rules passed or lenient mode)
         if self.config.llm_judge_enabled:
-            # Run LLM judge asynchronously
-            import asyncio
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    # We're in an async context, create a task
-                    import concurrent.futures
-                    with concurrent.futures.ThreadPoolExecutor() as pool:
-                        judge_result = pool.submit(
-                            asyncio.run,
-                            self.llm_judge.evaluate(
-                                response=response,
-                                user_request=user_request,
-                                context=context,
-                            ),
-                        ).result()
-                else:
-                    judge_result = asyncio.run(
-                        self.llm_judge.evaluate(
-                            response=response,
-                            user_request=user_request,
-                            context=context,
-                        )
-                    )
+                judge_result = await self.llm_judge.evaluate(
+                    response=response,
+                    user_request=user_request,
+                    context=context,
+                )
             except Exception as e:
                 logger.warning(f"LLM judge failed: {e}")
                 judge_result = ValidationResult(

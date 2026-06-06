@@ -18,6 +18,7 @@ from sharp.harness.prompt.composer import PromptComposer
 from sharp.harness.execution.loop import ExecutionLoop
 from sharp.harness.execution.providers import LLMProvider
 from sharp.harness.execution.tools import ToolRegistry
+from sharp.harness.execution.subagents import SubAgentManager, SubAgentDefinition
 from sharp.harness.validation.validator import ResponseValidator
 from sharp.harness.validation.retry import RetryEngine
 from sharp.harness.safety.circuit_breaker import CircuitBreaker
@@ -37,7 +38,7 @@ class HarnessEngine:
     The engine manages the full lifecycle:
     1. Context Engineering: curate relevant context
     2. Prompt Engineering: assemble augmented prompt
-    3. LLM Execution: run with tools/sub-agents
+    3. LLM Execution: run with tools/sub-agents (ReAct loop)
     4. Validation: check quality, retry if needed
     5. Safety: circuit breakers, budget controls
     6. State: checkpoint/resume
@@ -48,11 +49,16 @@ class HarnessEngine:
         self.config = config or HarnessConfig.default()
         self._trace_id = str(uuid.uuid4())
 
+        # Wire safety.blocked_commands → tool.blocked_tools
+        if self.config.safety.blocked_commands and not self.config.tools.blocked_tools:
+            self.config.tools.blocked_tools = list(self.config.safety.blocked_commands)
+
         # Initialize all zones
         self.context_curator = ContextCurator(self.config.context)
         self.prompt_composer = PromptComposer(self.config.prompt)
         self.tool_registry = ToolRegistry(self.config.tools)
         self.execution_loop = ExecutionLoop(self.config.execution, self.tool_registry)
+        self.subagent_manager = SubAgentManager()
         self.validator = ResponseValidator(self.config.validation)
         self.retry_engine = RetryEngine(self.config.validation)
         self.circuit_breaker = CircuitBreaker(self.config.safety)
@@ -69,6 +75,27 @@ class HarnessEngine:
         self._memory: dict[str, str] = {}
         self._prior_outputs: list[str] = []
         self._mcp_connected = False
+
+        # Register built-in sub-agents
+        self._register_default_subagents()
+
+    def _register_default_subagents(self) -> None:
+        """Register default sub-agent definitions."""
+        self.subagent_manager.register(SubAgentDefinition(
+            name="researcher",
+            role="Research Specialist",
+            instructions="You are a research specialist. Find and synthesize information accurately.",
+        ))
+        self.subagent_manager.register(SubAgentDefinition(
+            name="coder",
+            role="Code Specialist",
+            instructions="You are a code specialist. Write clean, correct, well-documented code.",
+        ))
+        self.subagent_manager.register(SubAgentDefinition(
+            name="reviewer",
+            role="Code Reviewer",
+            instructions="You are a code reviewer. Review code for bugs, style issues, and improvements.",
+        ))
 
     def tool(
         self,
@@ -108,11 +135,7 @@ class HarnessEngine:
         self._memory[path] = content
 
     async def connect_mcp_servers(self) -> None:
-        """Connect to all configured MCP servers and discover their capabilities.
-
-        Auto-connects if mcp.auto_discover is True.
-        Can be called manually for explicit control.
-        """
+        """Connect to all configured MCP servers and discover their capabilities."""
         if not self.config.mcp.enabled:
             return
 
@@ -197,19 +220,19 @@ class HarnessEngine:
 
             # Phase 1: Context Engineering
             logger.info("Phase 1: Context Engineering")
-            context_sources = self.context_curator.curate(
+            curated = self.context_curator.curate(
                 user_request=user_request,
                 memory=self._memory,
                 prior_outputs=self._prior_outputs,
                 retrieved_docs=kwargs.get("docs", []),
-                checkpoint_context=checkpoint.context if checkpoint else None,
+                checkpoint_context=None,
             )
 
             # Phase 2: Prompt Engineering
             logger.info("Phase 2: Prompt Engineering")
             augmented_prompt = self.prompt_composer.compose(
                 user_request=user_request,
-                context_sources=context_sources,
+                context_sources=curated.sources,
                 tools=self._tools,
             )
 
@@ -222,7 +245,13 @@ class HarnessEngine:
 
             # Post-flight
             elapsed_ms = (time.time() - start_time) * 1000
-            self.metrics.end_trace(self._trace_id, success=True, latency_ms=elapsed_ms)
+            self.metrics.end_trace(
+                self._trace_id,
+                success=True,
+                latency_ms=elapsed_ms,
+                tokens=result.total_tokens,
+                cost=result.total_cost_usd,
+            )
             self.circuit_breaker.record_success()
             self.budget_manager.record_tokens(result.total_tokens)
             self.budget_manager.record_cost(result.total_cost_usd)
@@ -230,7 +259,7 @@ class HarnessEngine:
             # Save checkpoint
             self.checkpoint_manager.save(
                 self._trace_id,
-                context=context_sources,
+                context=curated.sources,
                 output=result.output,
             )
 
@@ -286,37 +315,61 @@ class HarnessEngine:
 
     async def _execute_with_retry(
         self,
-        augmented_prompt: str,
+        augmented_prompt: Any,
         user_request: str,
     ) -> Any:
-        """Execute LLM with validation retry loop."""
+        """Execute LLM with validation retry loop.
+
+        Uses the ExecutionLoop for ReAct-style execution when tools are available,
+        falls back to direct LLM call for simple requests.
+        """
         max_attempts = self.config.validation.max_retries + 1
         last_error = ""
 
         for attempt in range(1, max_attempts + 1):
             logger.info(f"Attempt {attempt}/{max_attempts}")
 
-            # Execute
             provider = LLMProvider(self.config.llm)
-            response = await provider.complete(
-                system_prompt=augmented_prompt.system_prompt,
-                user_message=augmented_prompt.user_message,
-                tools=self._tools if self.config.prompt.include_tools_in_prompt else [],
-            )
+
+            # Use execution loop if tools are available and strategy is react
+            has_tools = bool(self._tools) and self.config.prompt.include_tools_in_prompt
+            use_loop = has_tools and self.config.execution.loop_strategy.value == "react"
+
+            if use_loop:
+                # Run through the ReAct execution loop
+                output = await self.execution_loop.run(
+                    provider=provider,
+                    user_request=augmented_prompt.user_message,
+                    tools=self._tools,
+                    system_prompt=augmented_prompt.system_prompt,
+                )
+                # Create a synthetic LLMResponse-like object for validation
+                tokens_used = len(output.split()) * 2  # rough estimate
+                cost = 0.0
+            else:
+                # Direct LLM call (no tools or non-react strategy)
+                response = await provider.complete(
+                    system_prompt=augmented_prompt.system_prompt,
+                    user_message=augmented_prompt.user_message,
+                    tools=self._tools if has_tools else [],
+                )
+                output = response.content
+                tokens_used = response.tokens_used
+                cost = response.cost_usd
 
             # Validate
-            validation = self.validator.validate(
-                response=response.content,
+            validation = await self.validator.validate(
+                response=output,
                 user_request=user_request,
                 context=augmented_prompt.context_summary,
             )
 
             if validation.passed:
                 return _ExecutionResult(
-                    output=response.content,
+                    output=output,
                     attempts=attempt,
-                    total_cost_usd=response.cost_usd,
-                    total_tokens=response.tokens_used,
+                    total_cost_usd=cost,
+                    total_tokens=tokens_used,
                     validation_score=validation.score,
                 )
 
@@ -326,7 +379,6 @@ class HarnessEngine:
 
             # Check if we should retry
             if attempt < max_attempts:
-                # Mutate context for retry
                 mutated = self.retry_engine.mutate_for_retry(
                     original_prompt=augmented_prompt,
                     validation_result=validation,
@@ -335,6 +387,31 @@ class HarnessEngine:
                 augmented_prompt = mutated
 
         raise RetryExhaustedError(max_attempts, last_error)
+
+    async def delegate_to_subagent(
+        self,
+        agent_name: str,
+        task: str,
+        context: dict[str, Any] | None = None,
+    ) -> str:
+        """Delegate a task to a sub-agent.
+
+        Args:
+            agent_name: Name of the registered sub-agent.
+            task: The task to delegate.
+            context: Additional context for the sub-agent.
+
+        Returns:
+            The sub-agent's response.
+        """
+        provider = LLMProvider(self.config.llm)
+        result = await self.subagent_manager.spawn(
+            name=agent_name,
+            task=task,
+            provider=provider,
+            context=context,
+        )
+        return result.output
 
 
 class _ExecutionResult:

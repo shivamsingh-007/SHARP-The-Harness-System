@@ -25,19 +25,22 @@ class FileBackend:
 
     def get(self, key: str) -> str | None:
         """Get a value by key."""
-        path = self._base_dir / f"{key}.json"
+        safe_key = self._sanitize_key(key)
+        path = self._base_dir / f"{safe_key}.json"
         if path.exists():
             return path.read_text(encoding="utf-8")
         return None
 
     def set(self, key: str, value: str) -> None:
         """Set a value by key."""
-        path = self._base_dir / f"{key}.json"
+        safe_key = self._sanitize_key(key)
+        path = self._base_dir / f"{safe_key}.json"
         path.write_text(value, encoding="utf-8")
 
     def delete(self, key: str) -> bool:
         """Delete a value by key."""
-        path = self._base_dir / f"{key}.json"
+        safe_key = self._sanitize_key(key)
+        path = self._base_dir / f"{safe_key}.json"
         if path.exists():
             path.unlink()
             return True
@@ -46,9 +49,15 @@ class FileBackend:
     def list_keys(self, prefix: str = "") -> list[str]:
         """List all keys with optional prefix."""
         keys = []
-        for path in self._base_dir.glob(f"{prefix}*.json"):
+        sanitized_prefix = prefix.replace(":", "-")
+        for path in self._base_dir.glob(f"{sanitized_prefix}*.json"):
             keys.append(path.stem)
         return keys
+
+    @staticmethod
+    def _sanitize_key(key: str) -> str:
+        """Sanitize key for filesystem (replace colons with dashes)."""
+        return key.replace(":", "-")
 
 
 class RedisBackend:

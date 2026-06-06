@@ -10,9 +10,9 @@ A production-grade harness for LLM agents with context engineering, prompt engin
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-00FF00?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Tests: 58/58](https://img.shields.io/badge/Tests-58%20passed-44CC11?style=for-the-badge&logo=pytest&logoColor=white)](#-testing)
+[![Tests: 218/218](https://img.shields.io/badge/Tests-218%20passed-44CC11?style=for-the-badge&logo=pytest&logoColor=white)](#-testing)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-FF6B35?style=for-the-badge&logo=modelcontextprotocol&logoColor=white)](#-mcp-integration)
-[![Code: 4,601 LOC](https://img.shields.io/badge/Engine-4,601%20lines-8B5CF6?style=for-the-badge)](#-architecture)
+[![Code: 5,335 LOC](https://img.shields.io/badge/Engine-5,335%20lines-8B5CF6?style=for-the-badge)](#-architecture)
 
 <br />
 
@@ -107,17 +107,18 @@ sharp/harness/
 
 | Zone | Files | Lines | Purpose |
 |:---|:---:|:---:|:---|
-| `core` | 5 | 766 | Engine orchestrator, config, shared types |
+| `core` | 5 | 839 | Engine orchestrator, config, shared types |
 | `mcp` | 5 | 936 | MCP client, server registry, tool/resource/prompt bridge |
 | `context` | 6 | 637 | Context curator, memory manager, document retrieval, compression |
-| `execution` | 5 | 492 | Multi-provider LLM, tool governance, ReAct loop, sub-agents |
-| `validation` | 5 | 462 | LLM judge, rule engine, retry with feedback mutation |
+| `execution` | 5 | 771 | Multi-provider LLM, tool governance, ReAct loop, sub-agents |
+| `validation` | 5 | 432 | LLM judge, rule engine, retry with feedback mutation |
 | `prompt` | 4 | 329 | Prompt composer, templates, token budget allocator |
 | `safety` | 5 | 315 | Circuit breaker, budget limits, permissions, human-in-the-loop |
-| `observability` | 5 | 286 | Metrics, OpenTelemetry tracing, structured logging |
-| `state` | 4 | 232 | Checkpointing, session management, file/Redis persistence |
+| `observability` | 5 | 289 | Metrics, OpenTelemetry tracing, structured logging |
+| `state` | 4 | 241 | Checkpointing, session management, file/Redis persistence |
+| `benchmarks` | 2 | 247 | Benchmark runner with 5 test types |
 | `utils` | 4 | 146 | Token counting, async helpers, formatting |
-| **Total** | **48** | **4,601** | |
+| **Total** | **52** | **5,335** | |
 
 ---
 
@@ -296,11 +297,12 @@ llm:
   provider: openai
   model: gpt-4o
   temperature: 0.7
-  max_tokens: 4096
+  max_tokens: 2048
 
 validation:
   enabled: true
   level: strict
+  llm_judge_enabled: true
   max_retries: 3
   min_score: 0.7
 
@@ -309,9 +311,14 @@ safety:
   failure_threshold: 5
   max_cost_usd: 10.0
   max_tokens: 100000
+  blocked_commands:
+    - rm -rf
+    - sudo
+    - mkfs
 
 mcp:
   enabled: true
+  auto_discover: true
   servers:
     - name: filesystem
       command: npx
@@ -349,15 +356,32 @@ pytest tests/ --cov=sharp --cov-report=term-missing
 ```
 
 ```
-tests/test_context.py       10/10  ✓  Context Engineering
-tests/test_prompt.py         5/5   ✓  Prompt Engineering
-tests/test_engine.py         4/4   ✓  Core Engine
-tests/test_safety.py        11/11  ✓  Safety Layer
-tests/test_validation.py     5/5   ✓  Validation Zone
-tests/test_utils.py          5/5   ✓  Utilities
-tests/test_mcp/             18/18  ✓  MCP Module
+tests/test_engine.py         18/18  ✓  Core Engine
+tests/test_loop.py           20/20  ✓  ReAct Execution Loop
+tests/test_providers.py       9/9   ✓  LLM Providers
+tests/test_subagents.py      11/11  ✓  Sub-Agents
+tests/test_context.py        10/10  ✓  Context Engineering
+tests/test_prompt.py          5/5   ✓  Prompt Engineering
+tests/test_validation.py     11/11  ✓  Validation Zone
+tests/test_validator.py       6/6   ✓  Response Validator
+tests/test_judge.py           7/7   ✓  LLM Judge
+tests/test_retry.py           3/3   ✓  Retry Engine
+tests/test_safety.py         11/11  ✓  Safety Layer
+tests/test_memory.py         12/12  ✓  Memory Manager
+tests/test_retrieval.py       9/9   ✓  Document Retrieval
+tests/test_checkpoint.py      7/7   ✓  Checkpoint Manager
+tests/test_session.py         8/8   ✓  Session Manager
+tests/test_persistence.py     7/7   ✓  File Backend
+tests/test_metrics.py         7/7   ✓  Metrics Collector
+tests/test_tracing.py         4/4   ✓  Tracer
+tests/test_logging.py         4/4   ✓  Structured Logging
+tests/test_human_approval.py  7/7   ✓  HITL Gates
+tests/test_async_helpers.py   7/7   ✓  Async Utilities
+tests/test_utils.py           5/5   ✓  Utilities
+tests/test_integration.py    14/14  ✓  End-to-End Integration
+tests/test_mcp/              18/18  ✓  MCP Module
 ─────────────────────────────────────
-Total:                       58/58  ✓  All Passing
+Total:                      218/218  ✓  All Passing
 ```
 
 ---
@@ -365,7 +389,7 @@ Total:                       58/58  ✓  All Passing
 ## 📦 Project Structure
 
 ```
-sharp/                          # Python package (48 modules, 4,601 lines)
+sharp/                          # Python package (52 modules, 5,335 lines)
 ├── __init__.py                 # Public API: HarnessEngine, HarnessConfig, errors
 ├── __main__.py                 # python -m sharp
 ├── cli.py                      # CLI: sharp run, sharp health, sharp config-show
@@ -379,9 +403,10 @@ sharp/                          # Python package (48 modules, 4,601 lines)
     ├── state/                  # Checkpoint, session, persistence
     ├── observability/          # Metrics, tracing, logging, telemetry
     ├── mcp/                    # MCP client, registry, bridge, server
+    ├── benchmarks/             # Benchmark runner, 5 test types
     └── utils/                  # Tokens, async, format
 
-tests/                          # Test suite (11 files, 555 lines)
+tests/                          # Test suite (29 files, 2,805 lines)
 examples/                       # Usage examples
 harness.yaml                    # Default config
 ```
