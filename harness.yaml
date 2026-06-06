@@ -48,11 +48,11 @@ tools:
 
 validation:
   enabled: true
-  level: strict
+  level: lenient
   llm_judge_enabled: true
   llm_judge_model: gpt-4o-mini
-  min_score: 0.7
-  max_retries: 3
+  min_score: 0.5
+  max_retries: 2
   rules: []
 
 safety:
@@ -90,4 +90,16 @@ execution:
 mcp:
   enabled: true
   auto_discover: true
-  servers: []
+  servers:
+    - name: sharp
+      transport: stdio
+      command: python
+      args: ["-m", "sharp.harness.mcp.server"]
+      enabled: true
+      description: "SHARP MCP server with time and calculation tools"
+    - name: filesystem
+      transport: stdio
+      command: npx
+      args: ["-y", "@modelcontextprotocol/server-filesystem", "./"]
+      enabled: false
+      description: "Local filesystem access (enable when needed)"

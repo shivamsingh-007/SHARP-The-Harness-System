@@ -147,8 +147,127 @@ class HarnessEngine:
             result = _eval(tree)
             return f"{expression} = {result}"
 
+        async def read_file(path: str) -> str:
+            """Read the contents of a file.
+
+            Args:
+                path: Path to the file to read
+            """
+            from pathlib import Path
+            p = Path(path)
+            if not p.exists():
+                return f"Error: File '{path}' not found"
+            if not p.is_file():
+                return f"Error: '{path}' is not a file"
+            try:
+                content = p.read_text(encoding="utf-8")
+                if len(content) > 5000:
+                    content = content[:5000] + f"\n... [truncated, {len(p.read_text(encoding='utf-8'))} total chars]"
+                return content
+            except Exception as e:
+                return f"Error reading file: {e}"
+
+        async def list_directory(path: str = ".") -> str:
+            """List files and directories in a path.
+
+            Args:
+                path: Directory path to list (default: current directory)
+            """
+            from pathlib import Path
+            p = Path(path)
+            if not p.exists():
+                return f"Error: Directory '{path}' not found"
+            if not p.is_dir():
+                return f"Error: '{path}' is not a directory"
+            entries = []
+            for entry in sorted(p.iterdir()):
+                prefix = "  " if entry.is_file() else "d "
+                size = entry.stat().st_size if entry.is_file() else 0
+                entries.append(f"{prefix}{entry.name} ({size} bytes)" if entry.is_file() else f"{prefix}{entry.name}/")
+            if not entries:
+                return f"Directory '{path}' is empty"
+            return "\n".join(entries[:50])  # Limit to 50 entries
+
+        async def search_files(pattern: str, path: str = ".") -> str:
+            """Search for files matching a glob pattern.
+
+            Args:
+                pattern: Glob pattern (e.g., "*.py", "**/*.js")
+                path: Directory to search in (default: current directory)
+            """
+            from pathlib import Path
+            p = Path(path)
+            if not p.exists():
+                return f"Error: Path '{path}' not found"
+            matches = list(p.glob(pattern))
+            if not matches:
+                return f"No files found matching '{pattern}' in '{path}'"
+            results = [str(m) for m in matches[:30]]  # Limit to 30 results
+            return f"Found {len(matches)} files:\n" + "\n".join(results)
+
+        async def grep_content(pattern: str, path: str = ".", include: str = "*") -> str:
+            """Search file contents using regex pattern.
+
+            Args:
+                pattern: Regex pattern to search for
+                path: Directory or file to search in (default: current directory)
+                include: File pattern to include (default: all files)
+            """
+            import re
+            from pathlib import Path
+            p = Path(path)
+            if not p.exists():
+                return f"Error: Path '{path}' not found"
+            compiled = re.compile(pattern, re.IGNORECASE)
+            results = []
+            files_searched = 0
+            if p.is_file():
+                files = [p]
+            else:
+                files = list(p.rglob(include))
+            for f in files[:100]:  # Limit files searched
+                files_searched += 1
+                try:
+                    content = f.read_text(encoding="utf-8", errors="ignore")
+                    for i, line in enumerate(content.split("\n"), 1):
+                        if compiled.search(line):
+                            results.append(f"{f}:{i}: {line.strip()[:100]}")
+                            if len(results) >= 20:
+                                break
+                except Exception:
+                    continue
+                if len(results) >= 20:
+                    break
+            if not results:
+                return f"No matches found for '{pattern}' in {files_searched} files"
+            return f"Matches ({len(results)} found in {files_searched} files):\n" + "\n".join(results)
+
         self.tool(risk_level=RiskLevel.READ)(get_current_time)
         self.tool(risk_level=RiskLevel.READ)(calculate)
+        self.tool(risk_level=RiskLevel.READ)(read_file)
+        self.tool(risk_level=RiskLevel.READ)(list_directory)
+        self.tool(risk_level=RiskLevel.READ)(search_files)
+        self.tool(risk_level=RiskLevel.READ)(grep_content)
+
+        async def delegate_to_agent(agent_name: str, task: str) -> str:
+            """Delegate a task to a specialized sub-agent.
+
+            Args:
+                agent_name: Name of the sub-agent (researcher, coder, reviewer)
+                task: The task for the sub-agent to perform
+            """
+            provider = LLMProvider(self.config.llm)
+            result = await self.subagent_manager.spawn(
+                name=agent_name,
+                task=task,
+                provider=provider,
+            )
+            if result.success:
+                return f"Sub-agent '{agent_name}' completed: {result.output[:1000]}"
+            else:
+                return f"Sub-agent '{agent_name}' failed: {result.error}"
+
+        self.tool(risk_level=RiskLevel.READ)(delegate_to_agent)
         logger.info(f"Registered {len(self._tools)} built-in tools")
 
     def tool(
@@ -207,7 +326,8 @@ class HarnessEngine:
             try:
                 await self.mcp_client.connect_from_config(server_config)
             except Exception as e:
-                logger.error(f"Failed to connect to MCP server '{server_config.name}': {e}")
+                logger.warning(f"MCP server '{server_config.name}' connection failed (non-fatal): {e}")
+                continue
 
         # Bridge tools into ToolRegistry
         registered_tools = await self.mcp_bridge.register_all_tools()

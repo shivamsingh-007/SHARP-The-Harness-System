@@ -17,9 +17,28 @@ from sharp.harness.observability.logging import get_logger
 
 logger = get_logger(__name__)
 
+# Global engine registry for sharing between opencode and dashboard
+_global_engines: dict[str, HarnessEngine] = {}
 
-def create_app(config: HarnessConfig | None = None) -> FastAPI:
-    """Create and configure the FastAPI dashboard server."""
+
+def register_engine(name: str, engine: HarnessEngine) -> None:
+    """Register a global engine instance for dashboard access."""
+    _global_engines[name] = engine
+    logger.info(f"Registered global engine: {name}")
+
+
+def get_engine(name: str = "default") -> HarnessEngine | None:
+    """Get a registered global engine instance."""
+    return _global_engines.get(name)
+
+
+def create_app(config: HarnessConfig | None = None, engine: HarnessEngine | None = None) -> FastAPI:
+    """Create and configure the FastAPI dashboard server.
+
+    Args:
+        config: Harness configuration (used if engine not provided)
+        engine: Shared engine instance (for connecting to opencode session)
+    """
     app = FastAPI(title="SHARP Dashboard", version="0.1.0")
 
     app.add_middleware(
@@ -30,7 +49,11 @@ def create_app(config: HarnessConfig | None = None) -> FastAPI:
         allow_headers=["*"],
     )
 
-    engine = HarnessEngine(config or HarnessConfig.default())
+    # Use provided engine, global engine, or create new one
+    if engine is None:
+        engine = get_engine() or HarnessEngine(config or HarnessConfig.default())
+        if engine not in _global_engines.values():
+            register_engine("default", engine)
     bridge = DashboardBridge(engine)
     ws_clients: set[WebSocket] = set()
     _startup_time = time.time()
@@ -202,6 +225,31 @@ def create_app(config: HarnessConfig | None = None) -> FastAPI:
                 "auto_discover": engine.config.mcp.auto_discover,
             },
         }
+
+    @app.get("/api/sessions")
+    async def sessions():
+        """Show all active sessions (engines)."""
+        sessions_list = []
+        for name, eng in _global_engines.items():
+            agg = eng.metrics.get_aggregate()
+            sessions_list.append({
+                "name": name,
+                "trace_id": eng._trace_id,
+                "total_traces": agg["total_traces"],
+                "total_tokens": agg["total_tokens"],
+                "total_cost": agg["total_cost"],
+                "tools_registered": len(eng._tools),
+                "mcp_connected": eng._mcp_connected,
+            })
+        return {"sessions": sessions_list, "active": len(sessions_list)}
+
+    @app.post("/api/engine/register")
+    async def engine_register(data: dict[str, str]):
+        """Register an external engine instance (e.g., from opencode session)."""
+        name = data.get("name", "default")
+        # The engine must be passed via the app's engine reference
+        register_engine(name, engine)
+        return {"ok": True, "name": name, "registered": True}
 
     @app.post("/api/engine/run")
     async def engine_run(request: dict[str, str]):
