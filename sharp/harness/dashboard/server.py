@@ -75,6 +75,105 @@ def create_app(config: HarnessConfig | None = None) -> FastAPI:
     async def safety():
         return bridge.get_safety()
 
+    # ─── MCP Server Management ────────────────────────────────────────
+
+    @app.get("/api/mcp/servers")
+    async def mcp_servers():
+        servers = []
+        for name in engine.mcp_client.registry._servers.values():
+            servers.append({
+                "name": name.name,
+                "transport": name.transport,
+                "command": name.command,
+                "args": name.args,
+                "url": name.url,
+                "enabled": name.enabled,
+                "description": name.description,
+                "connected": name.name in engine.mcp_client._connected,
+            })
+        connected = engine.mcp_client.connected_servers
+        return {
+            "servers": servers,
+            "connected": connected,
+            "tools": list(engine.mcp_client.discovered_tools.keys()),
+            "resources": list(engine.mcp_client.discovered_resources.keys()),
+            "prompts": list(engine.mcp_client.discovered_prompts.keys()),
+        }
+
+    @app.post("/api/mcp/servers")
+    async def mcp_add_server(server: dict[str, Any]):
+        from sharp.harness.mcp.registry import MCPServer
+        name = server.get("name", "")
+        if not name:
+            return {"error": "Server name required"}
+        mcp_server = MCPServer(
+            name=name,
+            transport=server.get("transport", "stdio"),
+            command=server.get("command"),
+            args=server.get("args", []),
+            url=server.get("url"),
+            enabled=server.get("enabled", True),
+            description=server.get("description", ""),
+        )
+        engine.mcp_client.registry.register(mcp_server)
+        return {"ok": True, "server": name}
+
+    @app.delete("/api/mcp/servers/{name}")
+    async def mcp_remove_server(name: str):
+        removed = engine.mcp_client.registry.unregister(name)
+        return {"ok": removed, "server": name}
+
+    @app.post("/api/mcp/servers/{name}/connect")
+    async def mcp_connect_server(name: str):
+        server = engine.mcp_client.registry.get(name)
+        if not server:
+            return {"error": f"Server '{name}' not found"}
+        try:
+            if server.transport == "stdio" and server.command:
+                await engine.mcp_client.connect_stdio(
+                    name, server.command, server.args
+                )
+            elif server.transport == "http" and server.url:
+                await engine.mcp_client.connect_http(name, server.url)
+            else:
+                return {"error": "Invalid transport or missing config"}
+            return {"ok": True, "server": name, "connected": True}
+        except Exception as e:
+            return {"error": str(e), "server": name}
+
+    @app.post("/api/mcp/servers/{name}/disconnect")
+    async def mcp_disconnect_server(name: str):
+        if name in engine.mcp_client._sessions:
+            try:
+                session = engine.mcp_client._sessions[name]
+                await session.__aexit__(None, None, None)
+                del engine.mcp_client._sessions[name]
+                engine.mcp_client._connected.discard(name)
+                return {"ok": True, "server": name}
+            except Exception as e:
+                return {"error": str(e)}
+        return {"error": f"Server '{name}' not connected"}
+
+    # ─── Plugin Management ────────────────────────────────────────────
+
+    @app.get("/api/plugins")
+    async def plugins():
+        mcp_tools = engine.mcp_client.discovered_tools
+        registered_tools = engine._tools
+        builtin_tools = [
+            {"name": t.name, "description": t.description, "risk_level": t.risk_level.value, "source": "builtin"}
+            for t in registered_tools
+        ]
+        mcp_tool_list = [
+            {"name": name, "description": info.get("description", ""), "risk_level": "read", "source": "mcp", "server": info.get("server", "")}
+            for name, info in mcp_tools.items()
+        ]
+        return {
+            "builtin": builtin_tools,
+            "mcp": mcp_tool_list,
+            "total": len(builtin_tools) + len(mcp_tool_list),
+        }
+
     @app.get("/api/config")
     async def config():
         return {

@@ -320,4 +320,79 @@ class TestServerSmoke:
         assert "/api/execution/current" in routes
         assert "/api/safety" in routes
         assert "/api/config" in routes
+        assert "/api/mcp/servers" in routes
+        assert "/api/plugins" in routes
         assert "/ws" in routes
+
+
+# ─── Smoke Tests: MCP Endpoints ─────────────────────────────────────────
+
+
+class TestAPIMCP:
+    def test_mcp_servers_list(self, client):
+        resp = client.get("/api/mcp/servers")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "servers" in data
+        assert "connected" in data
+        assert "tools" in data
+        assert "resources" in data
+
+    def test_mcp_add_server(self, client):
+        resp = client.post("/api/mcp/servers", json={
+            "name": "test-server",
+            "transport": "stdio",
+            "command": "echo",
+            "args": ["hello"],
+            "description": "Test server",
+        })
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ok"] is True
+        assert data["server"] == "test-server"
+
+        list_resp = client.get("/api/mcp/servers")
+        servers = list_resp.json()["servers"]
+        names = [s["name"] for s in servers]
+        assert "test-server" in names
+
+    def test_mcp_remove_server(self, client):
+        client.post("/api/mcp/servers", json={
+            "name": "to-remove",
+            "transport": "stdio",
+            "command": "echo",
+        })
+        resp = client.delete("/api/mcp/servers/to-remove")
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+
+    def test_mcp_connect_nonexistent(self, client):
+        resp = client.post("/api/mcp/servers/nonexistent/connect")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "error" in data
+
+
+# ─── Smoke Tests: Plugin Endpoints ──────────────────────────────────────
+
+
+class TestAPIPlugins:
+    def test_plugins_list(self, client):
+        resp = client.get("/api/plugins")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "builtin" in data
+        assert "mcp" in data
+        assert "total" in data
+        assert isinstance(data["builtin"], list)
+        assert isinstance(data["mcp"], list)
+
+    def test_plugins_have_required_fields(self, client):
+        resp = client.get("/api/plugins")
+        data = resp.json()
+        if data["builtin"]:
+            plugin = data["builtin"][0]
+            assert "name" in plugin
+            assert "description" in plugin
+            assert "risk_level" in plugin
+            assert "source" in plugin

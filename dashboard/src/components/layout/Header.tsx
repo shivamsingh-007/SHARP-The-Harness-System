@@ -3,7 +3,7 @@ import { StatusBadge } from '../shared/StatusBadge'
 import { Activity, Zap } from 'lucide-react'
 import { formatCost, formatNumber } from '../../lib/utils'
 
-const tabs = ['Overview', 'Sessions', 'Config', 'Logs']
+const tabs = ['Overview', 'MCP', 'Plugins', 'Sessions', 'Config', 'Logs']
 
 export function Header() {
   const { health, metrics, connected, activeTab, setActiveTab, timeRange, setTimeRange } =

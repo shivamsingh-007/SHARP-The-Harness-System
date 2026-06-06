@@ -114,3 +114,36 @@ export interface WSSnapshot {
   safety: SafetyResponse;
   timestamp: number;
 }
+
+export interface MCPServerItem {
+  name: string;
+  transport: string;
+  command: string | null;
+  args: string[];
+  url: string | null;
+  enabled: boolean;
+  description: string;
+  connected: boolean;
+}
+
+export interface MCPServersResponse {
+  servers: MCPServerItem[];
+  connected: string[];
+  tools: string[];
+  resources: string[];
+  prompts: string[];
+}
+
+export interface PluginItem {
+  name: string;
+  description: string;
+  risk_level: string;
+  source: string;
+  server?: string;
+}
+
+export interface PluginsResponse {
+  builtin: PluginItem[];
+  mcp: PluginItem[];
+  total: number;
+}
