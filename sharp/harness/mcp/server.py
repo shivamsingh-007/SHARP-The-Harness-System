@@ -27,10 +27,7 @@ def create_server():
     except ImportError:
         raise ImportError("MCP SDK not installed. Install with: pip install 'mcp>=1.20'")
 
-    mcp = FastMCP(
-        "Harness Custom Server",
-        description="A custom MCP server for the Harness System",
-    )
+    mcp = FastMCP("Harness Custom Server")
 
     @mcp.tool()
     def get_current_time(timezone: str = "UTC") -> str:
