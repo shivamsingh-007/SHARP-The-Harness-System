@@ -15,7 +15,7 @@ from sharp.harness.core.errors import (
 from sharp.harness.core.types import HarnessResult, ToolDefinition, ToolResult
 from sharp.harness.context.curator import ContextCurator
 from sharp.harness.prompt.composer import PromptComposer
-from sharp.harness.execution.loop import ExecutionLoop
+from sharp.harness.execution.loop import ExecutionLoop, LoopState
 from sharp.harness.execution.providers import LLMProvider
 from sharp.harness.execution.tools import ToolRegistry
 from sharp.harness.execution.subagents import SubAgentManager, SubAgentDefinition
@@ -75,9 +75,13 @@ class HarnessEngine:
         self._memory: dict[str, str] = {}
         self._prior_outputs: list[str] = []
         self._mcp_connected = False
+        self._last_loop_state: LoopState | None = None
 
         # Register built-in sub-agents
         self._register_default_subagents()
+
+        # Register built-in tools
+        self._register_builtin_tools()
 
     def _register_default_subagents(self) -> None:
         """Register default sub-agent definitions."""
@@ -96,6 +100,56 @@ class HarnessEngine:
             role="Code Reviewer",
             instructions="You are a code reviewer. Review code for bugs, style issues, and improvements.",
         ))
+
+    def _register_builtin_tools(self) -> None:
+        """Register built-in tools for the ReAct loop."""
+        from sharp.harness.core.types import RiskLevel
+
+        async def get_current_time(timezone: str = "UTC") -> str:
+            """Get the current date and time.
+
+            Args:
+                timezone: Timezone to return (UTC, local)
+            """
+            from datetime import datetime, timezone as tz
+            now = datetime.now(tz.utc)
+            return f"Current UTC time: {now.strftime('%Y-%m-%d %H:%M:%S UTC')}"
+
+        async def calculate(expression: str) -> str:
+            """Evaluate a mathematical expression safely.
+
+            Args:
+                expression: Math expression to evaluate (e.g., "2 + 2", "3 * 4")
+            """
+            import ast
+            import operator
+            allowed_ops = {
+                ast.Add: operator.add,
+                ast.Sub: operator.sub,
+                ast.Mult: operator.mul,
+                ast.Div: operator.truediv,
+                ast.Pow: operator.pow,
+                ast.USub: operator.neg,
+            }
+            def _eval(node: ast.AST) -> float:
+                if isinstance(node, ast.Expression):
+                    return _eval(node.body)
+                elif isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+                    return float(node.value)
+                elif isinstance(node, ast.BinOp) and type(node.op) in allowed_ops:
+                    left = _eval(node.left)
+                    right = _eval(node.right)
+                    return allowed_ops[type(node.op)](left, right)
+                elif isinstance(node, ast.UnaryOp) and type(node.op) in allowed_ops:
+                    return allowed_ops[type(node.op)](_eval(node.operand))
+                raise ValueError(f"Unsupported expression: {ast.dump(node)}")
+            tree = ast.parse(expression, mode="eval")
+            result = _eval(tree)
+            return f"{expression} = {result}"
+
+        self.tool(risk_level=RiskLevel.READ)(get_current_time)
+        self.tool(risk_level=RiskLevel.READ)(calculate)
+        logger.info(f"Registered {len(self._tools)} built-in tools")
 
     def tool(
         self,
@@ -342,6 +396,15 @@ class HarnessEngine:
                     user_request=augmented_prompt.user_message,
                     tools=self._tools,
                     system_prompt=augmented_prompt.system_prompt,
+                )
+                # Preserve loop state for dashboard
+                self._last_loop_state = LoopState(
+                    iteration=self.execution_loop.state.iteration,
+                    history=list(self.execution_loop.state.history),
+                    tool_calls=list(self.execution_loop.state.tool_calls),
+                    observations=list(self.execution_loop.state.observations),
+                    done=self.execution_loop.state.done,
+                    final_answer=self.execution_loop.state.final_answer,
                 )
                 # Create a synthetic LLMResponse-like object for validation
                 tokens_used = len(output.split()) * 2  # rough estimate

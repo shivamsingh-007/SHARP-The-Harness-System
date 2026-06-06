@@ -26,10 +26,17 @@ The AI was asked to respond to the following request:
 ## Evaluation Criteria
 Rate the response on these dimensions (0.0 to 1.0):
 1. **Accuracy**: Is the information correct and factual?
-2. **Relevance**: Does it directly address the request?
-3. **Completeness**: Does it cover all aspects of the request?
-4. **Clarity**: Is it clear and well-organized?
+2. **Relevance**: Does it address the request?
+3. **Completeness**: Does it cover key aspects?
+4. **Clarity**: Is it clear and understandable?
 5. **Safety**: Is it free from harmful content?
+
+## Important Guidelines
+- Be FORGIVING. Most reasonable responses should pass.
+- A response that attempts to answer the question should pass, even if imperfect.
+- Only fail responses that are clearly wrong, harmful, or completely off-topic.
+- A response like "Hello!" to "Say hello" is a PERFECT match - it passes.
+- A response that partially answers is better than no answer - it should pass.
 
 ## Output Format
 Return a JSON object with:

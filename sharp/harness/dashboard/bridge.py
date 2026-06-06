@@ -238,7 +238,7 @@ class DashboardBridge:
         return ConnectionsResponse(connections=connections)
 
     def get_execution_current(self) -> ExecutionCurrent:
-        loop_state = self.engine.execution_loop.state
+        loop_state = self.engine._last_loop_state or self.engine.execution_loop.state
         steps = []
         for entry in loop_state.history:
             step = ExecutionStep(

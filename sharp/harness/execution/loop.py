@@ -173,12 +173,16 @@ class ExecutionLoop:
             arguments = self._parse_action_args(args_str)
             return {"type": "action", "tool": tool_name, "arguments": arguments}
 
-        # Check for Thought (or any other content as thought)
+        # Check for Thought
         thought_match = re.search(r'Thought\s*:\s*(.+?)(?:\nAction|\nFinal|\Z)', content, re.DOTALL)
         if thought_match:
             return {"type": "thought", "content": thought_match.group(1).strip()}
 
-        # If content exists but no structured format, treat as thought
+        # If content exists but no structured format:
+        # On iteration 1 with no tools used yet, treat as final answer
+        if content and self._state.iteration > 1 and not self._state.tool_calls:
+            return {"type": "final_answer", "content": content}
+
         if content:
             return {"type": "thought", "content": content}
 

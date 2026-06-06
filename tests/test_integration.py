@@ -233,6 +233,7 @@ class TestFullPipeline:
         """Test tool registration and listing."""
         config = _make_config()
         engine = HarnessEngine(config)
+        initial_count = len(engine.tool_registry.list_tools())
 
         @engine.tool(risk_level=RiskLevel.READ)
         async def tool_a() -> str:
@@ -245,7 +246,7 @@ class TestFullPipeline:
             return x * 2
 
         tools = engine.tool_registry.list_tools()
-        assert len(tools) == 2
+        assert len(tools) == initial_count + 2
         names = [t.name for t in tools]
         assert "tool_a" in names
         assert "tool_b" in names

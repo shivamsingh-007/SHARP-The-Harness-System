@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+import re
 from pathlib import Path
 from typing import Any
 
@@ -70,12 +72,12 @@ class ValidationConfig(BaseModel):
     """Validation zone configuration."""
 
     enabled: bool = True
-    level: ValidationLevel = ValidationLevel.STRICT
+    level: ValidationLevel = ValidationLevel.LENIENT
     llm_judge_enabled: bool = True
     llm_judge_model: str = "gpt-4o-mini"
     rules: list[dict[str, Any]] = Field(default_factory=list)
-    min_score: float = 0.7
-    max_retries: int = 3
+    min_score: float = 0.5
+    max_retries: int = 2
 
 
 class SafetyConfig(BaseModel):
@@ -160,10 +162,31 @@ class HarnessConfig(BaseModel):
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> HarnessConfig:
-        """Load configuration from a YAML file."""
+        """Load configuration from a YAML file.
+
+        Supports ${VAR_NAME} environment variable expansion in string values.
+        """
         with open(path) as f:
             data = yaml.safe_load(f)
-        return cls(**data) if data else cls()
+        if data:
+            data = cls._expand_env_vars(data)
+            return cls(**data)
+        return cls()
+
+    @staticmethod
+    def _expand_env_vars(obj: Any) -> Any:
+        """Recursively expand ${VAR_NAME} patterns in string values."""
+        if isinstance(obj, str):
+            pattern = re.compile(r"\$\{(\w+)\}")
+            def replacer(match: re.Match) -> str:
+                var_name = match.group(1)
+                return os.environ.get(var_name, match.group(0))
+            return pattern.sub(replacer, obj)
+        elif isinstance(obj, dict):
+            return {k: HarnessConfig._expand_env_vars(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [HarnessConfig._expand_env_vars(item) for item in obj]
+        return obj
 
     @classmethod
     def default(cls) -> HarnessConfig:

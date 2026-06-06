@@ -7,5 +7,15 @@
   "compaction": {
     "auto": true,
     "tail_turns": 15
+  },
+  "mcp": {
+    "sharp": {
+      "type": "stdio",
+      "command": "python",
+      "args": ["-m", "sharp.harness.mcp.server"],
+      "env": {
+        "OPENROUTER_API_KEY": "${OPENROUTER_API_KEY}"
+      }
+    }
   }
 }

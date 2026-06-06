@@ -249,7 +249,7 @@ class MockLLMProvider:
         tool_calls: list[dict[str, Any]] | None = None,
         fail_after: int | None = None,
     ) -> None:
-        self._responses = responses or ["Mock response"]
+        self._responses = responses or ["Final Answer: Mock response"]
         self._tool_calls = tool_calls or []
         self._call_count = 0
         self._fail_after = fail_after

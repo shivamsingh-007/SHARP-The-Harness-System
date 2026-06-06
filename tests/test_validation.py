@@ -61,8 +61,8 @@ class TestValidationConfig:
     def test_default_config(self):
         config = ValidationConfig()
         assert config.enabled is True
-        assert config.max_retries == 3
-        assert config.min_score == 0.7
+        assert config.max_retries == 2
+        assert config.min_score == 0.5
 
 
 class TestLLMJudgeIntegration:

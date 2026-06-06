@@ -58,17 +58,19 @@ class TestHarnessEngineMemory:
 class TestHarnessEngineToolRegistration:
     def test_tool_registration(self):
         engine = HarnessEngine()
+        initial_count = len(engine._tools)
 
         @engine.tool(risk_level=RiskLevel.READ)
         async def test_tool(x: str) -> str:
             """Test tool."""
             return x
 
-        assert len(engine._tools) == 1
-        assert engine._tools[0].name == "test_tool"
+        assert len(engine._tools) == initial_count + 1
+        assert engine._tools[-1].name == "test_tool"
 
     def test_multiple_tools(self):
         engine = HarnessEngine()
+        initial_count = len(engine._tools)
 
         @engine.tool()
         async def tool_a() -> str:
@@ -80,7 +82,7 @@ class TestHarnessEngineToolRegistration:
             """Tool B."""
             return "b"
 
-        assert len(engine._tools) == 2
+        assert len(engine._tools) == initial_count + 2
 
 
 class TestHarnessEngineRun:
@@ -98,7 +100,7 @@ class TestHarnessEngineRun:
 
         assert isinstance(result, HarnessResult)
         assert result.success is True
-        assert result.output == "Mock response"
+        assert "Mock response" in result.output
         assert result.total_tokens > 0
 
     @pytest.mark.asyncio
@@ -144,7 +146,7 @@ class TestHarnessEngineRun:
             await engine.run("First request")
 
         assert len(engine._prior_outputs) == 1
-        assert engine._prior_outputs[0] == "Mock response"
+        assert "Mock response" in engine._prior_outputs[0]
 
     @pytest.mark.asyncio
     async def test_run_circuit_breaker_open(self):
