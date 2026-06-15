@@ -1,5 +1,5 @@
 {
-  "version": "2.0",
+  "version": "3.0",
   "project": "SHARP Harness System",
   "created": "2026-06-15",
   "karpathy_principles": [
@@ -210,7 +210,7 @@
     {
       "id": "23",
       "category": "orchestration",
-      "description": "Interface adapters normalize Claude/ChatGPT/ClaudeCode requests",
+      "description": "Interface adapters normalize all 8 interface types",
       "test_command": "python -m pytest tests/test_orchestration.py -k adapter -q --tb=short",
       "passes": false,
       "last_tested": null,
@@ -257,6 +257,51 @@
       "category": "orchestration",
       "description": "Full pipeline: interface request -> route -> context -> execute -> validate -> respond",
       "test_command": "python -m pytest tests/test_orchestration.py -k pipeline -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "29",
+      "category": "http_api",
+      "description": "POST /api/route routes task to best interface/model",
+      "test_command": "python -m pytest tests/test_http_api.py -k route -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "30",
+      "category": "http_api",
+      "description": "POST /api/validate validates AI output",
+      "test_command": "python -m pytest tests/test_http_api.py -k validate -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "31",
+      "category": "http_api",
+      "description": "POST /api/coding/session starts coding agent",
+      "test_command": "python -m pytest tests/test_http_api.py -k coding -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "32",
+      "category": "mcp",
+      "description": "MCP server exposes 3 SHARP tools (validate, coding, route)",
+      "test_command": "python -m pytest tests/test_mcp_sharp_tools.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "33",
+      "category": "public_api",
+      "description": "sharp/__init__.py exports Orchestrator, IntentRouter, InterfaceType",
+      "test_command": "python -c \"from sharp import Orchestrator, IntentRouter, InterfaceType; print('PASS')\"",
       "passes": false,
       "last_tested": null,
       "evidence_id": null

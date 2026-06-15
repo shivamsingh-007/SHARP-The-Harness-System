@@ -13,6 +13,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from sharp.harness.core.engine import HarnessEngine
 from sharp.harness.core.config import HarnessConfig
 from sharp.harness.dashboard.bridge import DashboardBridge
+from sharp.harness.orchestration.router import IntentRouter, IntentRouterConfig
+from sharp.harness.orchestration.orchestrator import Orchestrator, OrchestratorConfig
 from sharp.harness.observability.logging import get_logger
 
 logger = get_logger(__name__)
@@ -281,6 +283,95 @@ def create_app(config: HarnessConfig | None = None, engine: HarnessEngine | None
         except Exception as e:
             bridge.record_error(str(e))
             return {"error": str(e)}
+
+    # ─── Orchestration API ──────────────────────────────────────────────
+
+    @app.post("/api/route")
+    async def route_task(request: dict[str, Any]):
+        """Route a task to the best AI interface/model.
+
+        Input: {"task": "fix the login bug", "context": {"files_involved": [...]}}
+        Output: {"decision": {...}, "explanation": "..."}
+        """
+        task = request.get("task", "")
+        if not task:
+            return {"error": "No task provided"}
+
+        context = request.get("context", {})
+        router = IntentRouter()
+        decision = router.route(task, context)
+
+        return {
+            "decision": {
+                "task_type": decision.task_type.value,
+                "complexity": decision.complexity.value,
+                "recommended_interface": decision.recommended_interface.value,
+                "recommended_model": decision.recommended_model.value,
+                "estimated_latency_ms": decision.estimated_latency_ms,
+                "estimated_cost_usd": decision.estimated_cost_usd,
+                "confidence": decision.confidence,
+            },
+            "explanation": decision.reasoning,
+            "alternatives": {
+                "interfaces": [i.value for i in decision.alternative_interfaces],
+                "models": [m.value for m in decision.alternative_models],
+            },
+        }
+
+    @app.post("/api/validate")
+    async def validate_output(request: dict[str, Any]):
+        """Validate AI output for hallucinations and quality.
+
+        Input: {"output": "...", "task_type": "rag|coding"}
+        Output: {"passed": bool, "score": float, "issues": [...]}
+        """
+        output = request.get("output", "")
+        if not output:
+            return {"error": "No output provided"}
+
+        task_type = request.get("task_type", "general")
+        validator = engine.validator
+
+        try:
+            result = await validator.validate(output, task_type=task_type)
+            return {
+                "passed": result.passed,
+                "score": result.score,
+                "issues": result.issues if hasattr(result, "issues") else [],
+                "details": result.details if hasattr(result, "details") else {},
+            }
+        except Exception as e:
+            return {"error": str(e), "passed": False, "score": 0.0, "issues": [str(e)]}
+
+    @app.post("/api/coding/session")
+    async def coding_session(request: dict[str, Any]):
+        """Run a coding agent session (start + DPEVR loop + end).
+
+        Input: {"project_root": "/path/to/project", "session_id": 1}
+        Output: {"status": "...", "feature": {...}, "progress": [...]}
+        """
+        project_root = request.get("project_root", ".")
+        session_id = request.get("session_id", 1)
+
+        try:
+            from sharp.harness.agents.coding import CodingAgent, CodingConfig
+
+            config = CodingConfig(project_root=project_root)
+            agent = CodingAgent(config=config)
+            state = await agent.start_session()
+
+            features = agent.artifacts.read_features()
+            progress = agent.artifacts.read_progress()
+
+            return {
+                "status": "started",
+                "session_id": session_id,
+                "feature": features[-1] if features else None,
+                "progress": [p.__dict__ for p in progress] if progress else [],
+                "project_root": project_root,
+            }
+        except Exception as e:
+            return {"error": str(e), "status": "failed"}
 
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):

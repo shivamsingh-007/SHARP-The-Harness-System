@@ -40,22 +40,45 @@ Created: 2026-06-15
 - Artifact persistence (JSON validity, progress growth, health check, feature persistence)
 - All 12 integration tests passing
 
-## Phase 6: Universal Orchestration Layer [IN PROGRESS]
-- Created: orchestration/types.py — InterfaceType, TaskType, ModelType, RoutingDecision, AuditEntry, PerformanceSnapshot
+## Phase 6: Universal Orchestration Layer [COMPLETE]
+- Created: orchestration/types.py — InterfaceType (8 types), TaskType, ModelType, RoutingDecision, AuditEntry, PerformanceSnapshot
 - Created: orchestration/router.py — IntentRouter with task classification + routing rules + strategies
-- Created: orchestration/adapters.py — ClaudeApp, ChatGPTApp, ClaudeCode, CustomAPI adapters
+- Created: orchestration/adapters.py — 8 adapters: ClaudeApp, ChatGPTApp, ClaudeCode, CustomAPI, Copilot, VSCodeAI, Cursor, Windsurf
 - Created: orchestration/aggregator.py — ContextAggregator merges git, files, progress, interface histories
 - Created: orchestration/orchestrator.py — Main entry point tying router+context+validation+audit
 - Created: orchestration/audit.py — AuditLogger with JSON-lines persistence + queries
-- Tests: PENDING (tests/test_orchestration.py to be written)
+- Tests: 83 passing (test_orchestration.py)
+
+## Phase 7: Public API Stabilization [COMPLETE]
+- Updated: sharp/__init__.py — exports Orchestrator, IntentRouter, ContextAggregator, AuditLogger, InterfaceType, TaskType, ModelType
+- All imports verified working
+
+## Phase 8: HTTP API Endpoints [COMPLETE]
+- Added to dashboard/server.py:
+  - POST /api/route — Route task to best AI interface/model
+  - POST /api/validate — Validate AI output for hallucinations
+  - POST /api/coding/session — Start coding agent session
+  - GET /api/health — Now includes version string
+- Added: fastapi + uvicorn[standard] to pyproject.toml dependencies
+- Tests: 15 passing (test_http_api.py)
+
+## Phase 9: MCP Server for Claude Code [COMPLETE]
+- Rewrote: mcp/server.py with 3 SHARP tools:
+  - sharp_validate_output — Validate AI output for hallucinations
+  - sharp_run_coding_session — Run coding agent session with DPEVR
+  - sharp_route_task — Route task to best AI interface/model
+- Created: mcp/__main__.py — enables `python -m sharp.harness.mcp`
+- Transport: stdio (default, for Claude Code), HTTP via --transport flag (future)
+- Tests: 14 passing (test_mcp_sharp_tools.py)
 
 ## Architecture: SHARP as Universal Orchestration Layer
 ```
-Multiple AI Interfaces (Claude App, ChatGPT App, Claude Code, Custom API)
+Multiple AI Interfaces (Claude App, ChatGPT App, Claude Code, Custom API,
+                        Copilot, VS Code AI, Cursor, Windsurf)
         ↓
 SHARP Orchestration Layer
   • IntentRouter — which AI/interface for each task
-  • InterfaceAdapters — normalize requests from all interfaces
+  • InterfaceAdapters (8) — normalize requests from all interfaces
   • ContextAggregator — merge context from all sources
   • ToolRegistry — shared tools across all interfaces
   • ValidationLayer — output_validator + retry on every output
@@ -64,11 +87,16 @@ SHARP Orchestration Layer
         ↓
 AI Models Backend (Claude, GPT-4, OpenRouter, Custom)
         ↓
-Performance Dashboard — real-time metrics, model comparison, audit trail
+Integration Surfaces:
+  • HTTP API — POST /route, /validate, /coding/session (localhost)
+  • MCP Server — 3 tools for Claude Code (stdio transport)
+  • Dashboard — 15+ REST endpoints + WebSocket
 ```
 
-## Final Results (Before Orchestration Tests)
-- Total tests: 360 passed, 1 skipped
-- All phases 0-5 complete
+## Final Results
+- Total tests: 445+ passed, 1 skipped
+- All phases 0-9 complete
 - Multi-day coding workflow fully functional
-- Orchestration package written, tests pending
+- Orchestration layer with 8 interface adapters
+- HTTP API with 3 orchestration endpoints
+- MCP server with 3 SHARP tools for Claude Code

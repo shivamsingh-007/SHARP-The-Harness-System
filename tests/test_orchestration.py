@@ -33,6 +33,10 @@ from sharp.harness.orchestration.adapters import (
     ChatGPTAppAdapter,
     ClaudeCodeAdapter,
     CustomAPIAdapter,
+    CopilotAdapter,
+    VSCodeAIAdapter,
+    CursorAdapter,
+    WindsurfAdapter,
     get_adapter,
     ADAPTERS,
 )
@@ -267,6 +271,167 @@ class TestCustomAPIAdapter:
         assert formatted["success"] is True
 
 
+class TestCopilotAdapter:
+    def test_normalize_request(self):
+        adapter = CopilotAdapter()
+        raw = {"prompt": "Fix the bug", "files": ["auth.py"], "session_id": "s1"}
+        req = adapter.normalize_request(raw)
+        assert req.interface == InterfaceType.COPILOT
+        assert req.user_prompt == "Fix the bug"
+        assert req.files_involved == ["auth.py"]
+        assert req.session_id == "s1"
+
+    def test_format_response_success(self):
+        adapter = CopilotAdapter()
+        resp = InterfaceResponse(
+            success=True, output="Fixed!", interface=InterfaceType.COPILOT,
+            model=ModelType.GPT4O, tokens_input=50, tokens_output=30,
+        )
+        formatted = adapter.format_response(resp)
+        assert formatted["content"] == "Fixed!"
+        assert formatted["status"] == "success"
+        assert formatted["usage"]["prompt_tokens"] == 50
+
+    def test_format_response_failure(self):
+        adapter = CopilotAdapter()
+        resp = InterfaceResponse(
+            success=False, output="", interface=InterfaceType.COPILOT,
+            model=ModelType.GPT4O, error="timeout",
+        )
+        formatted = adapter.format_response(resp)
+        assert formatted["status"] == "error"
+        assert formatted["error"] == "timeout"
+
+    def test_interface_type(self):
+        assert CopilotAdapter().interface_type == InterfaceType.COPILOT
+
+    def test_available_tools(self):
+        tools = CopilotAdapter().get_available_tools()
+        assert "read_file" in tools
+        assert "web_search" in tools
+
+    def test_max_context_tokens(self):
+        assert CopilotAdapter().get_max_context_tokens() == 128000
+
+
+class TestVSCodeAIAdapter:
+    def test_normalize_request(self):
+        adapter = VSCodeAIAdapter()
+        raw = {"prompt": "Explain this code", "files": ["main.py"]}
+        req = adapter.normalize_request(raw)
+        assert req.interface == InterfaceType.VSCODE_AI
+        assert req.user_prompt == "Explain this code"
+        assert req.files_involved == ["main.py"]
+
+    def test_format_response(self):
+        adapter = VSCodeAIAdapter()
+        resp = InterfaceResponse(
+            success=True, output="This is a function.", interface=InterfaceType.VSCODE_AI,
+            model=ModelType.GPT4O, latency_ms=800, cost_usd=0.05,
+        )
+        formatted = adapter.format_response(resp)
+        assert formatted["content"] == "This is a function."
+        assert formatted["success"] is True
+        assert "Passed" in formatted["notification"]
+
+    def test_format_response_failure(self):
+        adapter = VSCodeAIAdapter()
+        resp = InterfaceResponse(
+            success=False, output="", interface=InterfaceType.VSCODE_AI,
+            model=ModelType.GPT4O, latency_ms=500, cost_usd=0.02,
+        )
+        formatted = adapter.format_response(resp)
+        assert formatted["success"] is False
+        assert "Failed" in formatted["notification"]
+
+    def test_interface_type(self):
+        assert VSCodeAIAdapter().interface_type == InterfaceType.VSCODE_AI
+
+    def test_available_tools(self):
+        tools = VSCodeAIAdapter().get_available_tools()
+        assert "write_file" in tools
+        assert "list_directory" in tools
+
+
+class TestCursorAdapter:
+    def test_normalize_request(self):
+        adapter = CursorAdapter()
+        raw = {"prompt": "fix bug", "files_involved": ["main.py"], "branch": "dev"}
+        req = adapter.normalize_request(raw)
+        assert req.interface == InterfaceType.CURSOR
+        assert req.files_involved == ["main.py"]
+        assert req.branch == "dev"
+
+    def test_format_response(self):
+        adapter = CursorAdapter()
+        resp = InterfaceResponse(
+            success=True, output="Fixed", interface=InterfaceType.CURSOR,
+            model=ModelType.CLAUDE_SONNET, files_modified=["auth.py"],
+            tests_passed=5, tests_total=5,
+        )
+        formatted = adapter.format_response(resp)
+        assert "[PASS]" in formatted["output"]
+        assert "auth.py" in formatted["output"]
+        assert "5/5" in formatted["output"]
+
+    def test_format_response_failure(self):
+        adapter = CursorAdapter()
+        resp = InterfaceResponse(
+            success=False, output="Error occurred", interface=InterfaceType.CURSOR,
+            model=ModelType.CLAUDE_SONNET,
+        )
+        formatted = adapter.format_response(resp)
+        assert "[FAIL]" in formatted["output"]
+        assert formatted["exit_code"] == 1
+
+    def test_available_tools_includes_terminal(self):
+        tools = CursorAdapter().get_available_tools()
+        assert "run_bash" in tools
+        assert "git_commit" in tools
+
+    def test_max_context_tokens(self):
+        assert CursorAdapter().get_max_context_tokens() == 200000
+
+
+class TestWindsurfAdapter:
+    def test_normalize_request(self):
+        adapter = WindsurfAdapter()
+        raw = {"prompt": "refactor this", "files": ["utils.py"], "session_id": "w1"}
+        req = adapter.normalize_request(raw)
+        assert req.interface == InterfaceType.WINDSURF
+        assert req.user_prompt == "refactor this"
+        assert req.files_involved == ["utils.py"]
+        assert req.session_id == "w1"
+
+    def test_format_response(self):
+        adapter = WindsurfAdapter()
+        resp = InterfaceResponse(
+            success=True, output="Done!", interface=InterfaceType.WINDSURF,
+            model=ModelType.CLAUDE_SONNET, latency_ms=1000, cost_usd=0.10,
+        )
+        formatted = adapter.format_response(resp)
+        assert formatted["content"] == "Done!"
+        assert formatted["status"] == "success"
+        assert formatted["metrics"]["latency_ms"] == 1000
+
+    def test_format_response_failure(self):
+        adapter = WindsurfAdapter()
+        resp = InterfaceResponse(
+            success=False, output="", interface=InterfaceType.WINDSURF,
+            model=ModelType.CLAUDE_SONNET,
+        )
+        formatted = adapter.format_response(resp)
+        assert formatted["status"] == "error"
+
+    def test_interface_type(self):
+        assert WindsurfAdapter().interface_type == InterfaceType.WINDSURF
+
+    def test_available_tools(self):
+        tools = WindsurfAdapter().get_available_tools()
+        assert "run_bash" in tools
+        assert "write_file" in tools
+
+
 class TestAdapterFactory:
     def test_get_adapter_claude_app(self):
         adapter = get_adapter(InterfaceType.CLAUDE_APP)
@@ -283,6 +448,22 @@ class TestAdapterFactory:
     def test_get_adapter_custom(self):
         adapter = get_adapter(InterfaceType.CUSTOM_API)
         assert isinstance(adapter, CustomAPIAdapter)
+
+    def test_get_adapter_copilot(self):
+        adapter = get_adapter(InterfaceType.COPILOT)
+        assert isinstance(adapter, CopilotAdapter)
+
+    def test_get_adapter_vscode_ai(self):
+        adapter = get_adapter(InterfaceType.VSCODE_AI)
+        assert isinstance(adapter, VSCodeAIAdapter)
+
+    def test_get_adapter_cursor(self):
+        adapter = get_adapter(InterfaceType.CURSOR)
+        assert isinstance(adapter, CursorAdapter)
+
+    def test_get_adapter_windsurf(self):
+        adapter = get_adapter(InterfaceType.WINDSURF)
+        assert isinstance(adapter, WindsurfAdapter)
 
     def test_all_interfaces_have_adapters(self):
         for iface in InterfaceType:

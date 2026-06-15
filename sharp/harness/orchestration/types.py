@@ -15,6 +15,10 @@ class InterfaceType(str, Enum):
     CHATGPT_APP = "chatgpt_app"
     CLAUDE_CODE = "claude_code"
     CUSTOM_API = "custom_api"
+    COPILOT = "copilot"
+    VSCODE_AI = "vscode_ai"
+    CURSOR = "cursor"
+    WINDSURF = "windsurf"
 
 
 class TaskType(str, Enum):
