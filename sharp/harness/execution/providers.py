@@ -35,6 +35,7 @@ class LLMProvider:
         system_prompt: str,
         user_message: str,
         tools: list[ToolDefinition] | None = None,
+        messages: list[dict[str, Any]] | None = None,
         **kwargs: Any,
     ) -> LLMResponse:
         """Send a completion request to the LLM.
@@ -43,6 +44,7 @@ class LLMProvider:
             system_prompt: The system prompt.
             user_message: The user's message.
             tools: Optional tool definitions for function calling.
+            messages: Optional full message history (overrides system_prompt + user_message).
             **kwargs: Additional parameters to pass to the LLM.
 
         Returns:
@@ -50,16 +52,19 @@ class LLMProvider:
         """
         start_time = time.time()
 
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_message},
-        ]
+        if messages:
+            msg_list = messages
+        else:
+            msg_list = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message},
+            ]
 
         call_kwargs: dict[str, Any] = {
             "model": f"{self.config.provider}/{self.config.model}"
             if "/" not in self.config.model
             else self.config.model,
-            "messages": messages,
+            "messages": msg_list,
             "temperature": self.config.temperature,
             "max_tokens": self.config.max_tokens,
             "timeout": self.config.timeout,

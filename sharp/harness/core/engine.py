@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import time
 import uuid
 from typing import Any
@@ -31,6 +32,16 @@ from sharp.harness.observability.logging import get_logger
 from sharp.harness.observability.metrics import MetricsCollector
 
 logger = get_logger(__name__)
+
+# Keywords that indicate tool-calling tasks (should use REACT loop)
+_TOOL_KEYWORDS = frozenset({
+    "file", "directory", "list", "read", "write", "search", "grep",
+    "calculate", "compute", "evaluate", "time", "date", "code",
+    "function", "class", "import", "run", "execute", "script",
+    "git", "commit", "push", "pull", "branch", "diff",
+    "api", "http", "request", "response", "server", "database",
+    "test", "lint", "build", "deploy", "docker", "container",
+})
 
 
 class HarnessEngine:
@@ -284,10 +295,13 @@ class HarnessEngine:
         level = risk_level or RiskLevel.READ
 
         def decorator(func: Any) -> Any:
+            # Extract parameter schema from function signature
+            parameters = self._extract_parameters(func)
+
             tool_def = ToolDefinition(
                 name=func.__name__,
                 description=func.__doc__ or f"Tool: {func.__name__}",
-                parameters={},
+                parameters=parameters,
                 risk_level=level,
                 requires_approval=requires_approval,
                 timeout=timeout,
@@ -297,6 +311,92 @@ class HarnessEngine:
             return func
 
         return decorator
+
+    def _extract_parameters(self, func: Any) -> dict[str, Any]:
+        """Extract JSON Schema parameters from a function's signature."""
+        try:
+            sig = inspect.signature(func)
+        except (ValueError, TypeError):
+            return {"type": "object", "properties": {}}
+
+        properties = {}
+        required = []
+
+        for name, param in sig.parameters.items():
+            prop: dict[str, Any] = {}
+
+            # Map Python type hints to JSON Schema types
+            if param.annotation != inspect.Parameter.empty:
+                type_map = {
+                    str: "string",
+                    int: "integer",
+                    float: "number",
+                    bool: "boolean",
+                    list: "array",
+                    dict: "object",
+                }
+                prop["type"] = type_map.get(param.annotation, "string")
+
+            # Set default value description
+            if param.default != inspect.Parameter.empty:
+                prop["default"] = param.default
+            else:
+                required.append(name)
+
+            properties[name] = prop
+
+        return {
+            "type": "object",
+            "properties": properties,
+            "required": required,
+        }
+
+    @staticmethod
+    def _is_simple_prompt(prompt: str) -> bool:
+        """Detect if a prompt is simple enough to bypass the REACT loop.
+
+        Simple prompts are short questions that don't need tool calling.
+        """
+        prompt_lower = prompt.lower().strip()
+        # Short prompts without explicit tool-use keywords
+        if len(prompt_lower) < 60:
+            # Only trigger REACT for explicit tool-use phrases
+            explicit_tool_phrases = [
+                "use the", "call the", "run the", "execute the",
+                "list the files", "read the file", "write to",
+                "search for", "grep", "what time", "current time",
+                "what date", "current date",
+            ]
+            has_explicit_tool = any(phrase in prompt_lower for phrase in explicit_tool_phrases)
+            if not has_explicit_tool:
+                return True
+        return False
+
+    @staticmethod
+    def _clean_output(output: str) -> str:
+        """Clean up output from the execution loop.
+
+        Strips JSON artifacts, LaTeX boxing, and other formatting issues.
+        """
+        if not output:
+            return output
+
+        import re
+
+        # Strip JSON array wrapper: [{"name": "Final Answer", "text": "..."}] -> ...
+        json_array_match = re.match(r'^\s*\[\s*\{.*?"text"\s*:\s*"(.+?)"\s*\}\s*\]\s*$', output, re.DOTALL)
+        if json_array_match:
+            output = json_array_match.group(1)
+
+        # Strip LaTeX boxing: $\boxed{4}$ -> 4
+        box_match = re.search(r'\\boxed\{(.+?)\}', output)
+        if box_match:
+            output = box_match.group(1).strip()
+
+        # Strip leading/trailing whitespace
+        output = output.strip()
+
+        return output
 
     def add_memory(self, key: str, value: str) -> None:
         """Add an item to persistent memory."""
@@ -498,6 +598,10 @@ class HarnessEngine:
             elapsed_ms = (time.time() - start_time) * 1000
             self.metrics.end_trace(self._trace_id, success=False, latency_ms=elapsed_ms)
             self.circuit_breaker.record_failure()
+            await self.hooks.fire(HookEvent.SESSION_END, HookContext(
+                event=HookEvent.SESSION_END,
+                data={"trace_id": self._trace_id, "success": False, "error": str(e)},
+            ))
             return HarnessResult(
                 success=False,
                 output="",
@@ -511,6 +615,10 @@ class HarnessEngine:
             self.metrics.end_trace(self._trace_id, success=False, latency_ms=elapsed_ms)
             self.circuit_breaker.record_failure()
             logger.exception("Harness execution failed")
+            await self.hooks.fire(HookEvent.SESSION_END, HookContext(
+                event=HookEvent.SESSION_END,
+                data={"trace_id": self._trace_id, "success": False, "error": str(e)},
+            ))
             return HarnessResult(
                 success=False,
                 output="",
@@ -546,9 +654,10 @@ class HarnessEngine:
                 logger.info("Execution cancelled by before_execute hook")
                 break
 
-            # Use execution loop if tools are available and strategy is react
+            # Fast path: simple prompts bypass the REACT loop
+            is_simple = self._is_simple_prompt(user_request)
             has_tools = bool(self._tools) and self.config.prompt.include_tools_in_prompt
-            use_loop = has_tools and self.config.execution.loop_strategy.value == "react"
+            use_loop = has_tools and self.config.execution.loop_strategy.value == "react" and not is_simple
 
             if use_loop:
                 # Run through the ReAct execution loop
@@ -571,15 +680,23 @@ class HarnessEngine:
                 tokens_used = len(output.split()) * 2  # rough estimate
                 cost = 0.0
             else:
-                # Direct LLM call (no tools or non-react strategy)
+                # Direct LLM call (no tools or non-react strategy or simple prompt)
+                # For simple prompts, use a minimal system prompt without tool references
+                system = augmented_prompt.system_prompt
+                if is_simple:
+                    system = "You are a helpful assistant. Answer the question directly and concisely. Do not mention tools."
+
                 response = await provider.complete(
-                    system_prompt=augmented_prompt.system_prompt,
+                    system_prompt=system,
                     user_message=augmented_prompt.user_message,
-                    tools=self._tools if has_tools else [],
+                    tools=self._tools if has_tools and not is_simple else [],
                 )
                 output = response.content
                 tokens_used = response.tokens_used
                 cost = response.cost_usd
+
+            # Post-process output: strip JSON artifacts from loop observations
+            output = self._clean_output(output)
 
             # Validate
             validation = await self.validator.validate(
@@ -609,7 +726,7 @@ class HarnessEngine:
 
             # Record failure for retry mutation
             last_error = "; ".join(validation.issues)
-            logger.warning(f"Validation failed (attempt {attempt}): {last_error}")
+            logger.debug(f"Validation failed (attempt {attempt}): {last_error}")
 
             # Fire on_validation_failure hook
             await self.hooks.fire(HookEvent.ON_VALIDATION_FAILURE, HookContext(

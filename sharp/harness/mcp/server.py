@@ -62,7 +62,11 @@ def create_server():
             from sharp.harness.core.engine import HarnessEngine
             from sharp.harness.core.config import HarnessConfig
 
-            config = HarnessConfig.default()
+            import os
+            if os.environ.get("OLLAMA_BASE_URL") or os.environ.get("OPENAI_API_KEY"):
+                config = HarnessConfig.default()
+            else:
+                config = HarnessConfig.ollama()
             engine = HarnessEngine(config)
 
             import asyncio
@@ -97,7 +101,7 @@ def create_server():
         """Run a coding agent session with the DPEVR workflow.
 
         Starts a session, runs the Detect-Prompt-Execute-Validate-Respond
-        loop, and returns the session state with features and progress.
+        loop on the next feature, ends the session, and returns results.
 
         Args:
             project_root: Path to the project root directory
@@ -112,21 +116,49 @@ def create_server():
             agent = CodingAgent(config=config)
 
             import asyncio
+
+            # Step 1: Start session
             state = asyncio.run(agent.start_session())
 
-            features = agent.artifacts.read_features()
-            progress = agent.artifacts.read_progress()
+            # Step 2: Run DPEVR on next feature
+            if state.next_feature:
+                dpevr_result = asyncio.run(agent.run_dpevr(state.next_feature))
 
-            latency_ms = (time.time() - start) * 1000
+                # Step 3: End session
+                asyncio.run(agent.end_session(
+                    feature=state.next_feature,
+                    result=dpevr_result,
+                ))
 
-            response = {
-                "status": "started",
-                "session_id": session_id,
-                "feature": features[-1] if features else None,
-                "progress_count": len(progress),
-                "project_root": project_root,
-                "latency_ms": round(latency_ms, 1),
-            }
+                latency_ms = (time.time() - start) * 1000
+
+                response = {
+                    "status": "completed",
+                    "session_id": session_id,
+                    "result": {
+                        "success": dpevr_result.success,
+                        "feature_id": dpevr_result.feature_id,
+                        "attempts": dpevr_result.attempts,
+                        "tests_passed": dpevr_result.tests_passed,
+                        "duration_ms": dpevr_result.total_duration_ms,
+                    },
+                    "feature": {
+                        "id": state.next_feature.id,
+                        "description": state.next_feature.description,
+                    },
+                    "project_root": project_root,
+                    "latency_ms": round(latency_ms, 1),
+                }
+            else:
+                latency_ms = (time.time() - start) * 1000
+                response = {
+                    "status": "no_features",
+                    "session_id": session_id,
+                    "message": "All features completed",
+                    "project_root": project_root,
+                    "latency_ms": round(latency_ms, 1),
+                }
+
             return json.dumps(response)
 
         except Exception as e:

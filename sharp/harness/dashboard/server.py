@@ -330,10 +330,19 @@ def create_app(config: HarnessConfig | None = None, engine: HarnessEngine | None
             return {"error": "No output provided"}
 
         task_type = request.get("task_type", "general")
-        validator = engine.validator
 
         try:
-            result = await validator.validate(output, task_type=task_type)
+            import os
+            if os.environ.get("OLLAMA_BASE_URL") or os.environ.get("OPENAI_API_KEY"):
+                val_config = HarnessConfig.default()
+            else:
+                val_config = HarnessConfig.ollama()
+            val_engine = HarnessEngine(val_config)
+            result = await val_engine.validator.validate(
+                response=output,
+                user_request=f"Validate {task_type} output",
+                context=f"Task type: {task_type}",
+            )
             return {
                 "passed": result.passed,
                 "score": result.score,
@@ -347,29 +356,55 @@ def create_app(config: HarnessConfig | None = None, engine: HarnessEngine | None
     async def coding_session(request: dict[str, Any]):
         """Run a coding agent session (start + DPEVR loop + end).
 
-        Input: {"project_root": "/path/to/project", "session_id": 1}
-        Output: {"status": "...", "feature": {...}, "progress": [...]}
+        Input: {"project_root": "/path/to/project", "session_id": 1, "engine_config": {...}}
+        Output: {"status": "...", "result": {...}, "feature": {...}, "progress": [...]}
         """
         project_root = request.get("project_root", ".")
         session_id = request.get("session_id", 1)
+        engine_config = request.get("engine_config", None)
 
         try:
             from sharp.harness.agents.coding import CodingAgent, CodingConfig
 
-            config = CodingConfig(project_root=project_root)
+            config = CodingConfig(project_root=project_root, engine_config=engine_config)
             agent = CodingAgent(config=config)
+
+            # Step 1: Start session
             state = await agent.start_session()
 
-            features = agent.artifacts.read_features()
-            progress = agent.artifacts.read_progress()
+            # Step 2: Run DPEVR on next feature
+            if state.next_feature:
+                dpevr_result = await agent.run_dpevr(state.next_feature)
 
-            return {
-                "status": "started",
-                "session_id": session_id,
-                "feature": features[-1] if features else None,
-                "progress": [p.__dict__ for p in progress] if progress else [],
-                "project_root": project_root,
-            }
+                # Step 3: End session (git commit + progress update)
+                await agent.end_session(
+                    feature=state.next_feature,
+                    result=dpevr_result,
+                )
+
+                return {
+                    "status": "completed",
+                    "session_id": session_id,
+                    "result": {
+                        "success": dpevr_result.success,
+                        "feature_id": dpevr_result.feature_id,
+                        "attempts": dpevr_result.attempts,
+                        "tests_passed": dpevr_result.tests_passed,
+                        "duration_ms": dpevr_result.total_duration_ms,
+                    },
+                    "feature": {
+                        "id": state.next_feature.id,
+                        "description": state.next_feature.description,
+                    },
+                    "project_root": project_root,
+                }
+            else:
+                return {
+                    "status": "no_features",
+                    "session_id": session_id,
+                    "message": "All features completed",
+                    "project_root": project_root,
+                }
         except Exception as e:
             return {"error": str(e), "status": "failed"}
 

@@ -4,15 +4,17 @@
 
 ### **S**ystem for **H**arnessing **A**ugmented **R**easoning and **T**ransforming **H**euristics
 
-A production-grade harness for LLM agents with context engineering, prompt engineering, validation, and MCP integration.
+A general-purpose orchestration framework for LLM tools and agents with context engineering, prompt engineering, validation, and MCP integration.
+
+**Security:** Designed for localhost development. Not production-hardened — CORS allows all origins, subprocess calls use `shell=True`, no auth on API endpoints.
 
 ---
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-00FF00?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Tests: 218/218](https://img.shields.io/badge/Tests-218%20passed-44CC11?style=for-the-badge&logo=pytest&logoColor=white)](#-testing)
+[![Tests: 472/472](https://img.shields.io/badge/Tests-472%20passed-44CC11?style=for-the-badge&logo=pytest&logoColor=white)](#-testing)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-FF6B35?style=for-the-badge&logo=modelcontextprotocol&logoColor=white)](#-mcp-integration)
-[![Code: 5,335 LOC](https://img.shields.io/badge/Engine-5,335%20lines-8B5CF6?style=for-the-badge)](#-architecture)
+[![Code: 8,648 LOC](https://img.shields.io/badge/Engine-8,648%20lines-8B5CF6?style=for-the-badge)](#-architecture)
 
 <br />
 
@@ -64,7 +66,7 @@ Most LLM agent frameworks give you a prompt and hope for the best. SHARP treats 
 
 ## ⚡ Performance
 
-Benchmarks measured on a real machine (Python 3.11, Windows). No simulated numbers.
+**Disclaimer:** These are synthetic microbenchmarks of mocked control flow. They measure in-memory operations (dict lookups, list appends, function calls) and do not reflect real workloads. Real LLM calls are orders of magnitude slower (seconds, not milliseconds).
 
 | Operation | Throughput | Latency |
 |:---|:---:|:---:|
@@ -75,7 +77,7 @@ Benchmarks measured on a real machine (Python 3.11, Windows). No simulated numbe
 | **Circuit breaker + budget check** | 730K checks/sec | **1.4 μs** |
 | **MCP tool conversion** | 80K conversions/sec | **12.5 μs** |
 | **MCP risk assessment** | 196K assessments/sec | **5.1 μs** |
-| **Full pipeline** (no LLM call) | — | **5.7 ms** |
+| **Full pipeline** (mocked LLM, no real call) | — | **5.7 ms** |
 
 ```
 Validation     ████░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░  0.03ms
@@ -118,7 +120,7 @@ sharp/harness/
 | `state` | 4 | 241 | Checkpointing, session management, file/Redis persistence |
 | `benchmarks` | 2 | 247 | Benchmark runner with 5 test types |
 | `utils` | 4 | 146 | Token counting, async helpers, formatting |
-| **Total** | **52** | **5,335** | |
+| **Total** | **52** | **8,648** | |
 
 ---
 
@@ -335,17 +337,35 @@ config = HarnessConfig()
 config.llm.model = "claude-3-5-sonnet"
 config.validation.max_retries = 5
 config.mcp.auto_discover = True
-
-engine = HarnessEngine(config)
 ```
+
+### Ollama (Local LLM)
+
+SHARP works with local models via Ollama. No API key required:
+
+```python
+from sharp import HarnessEngine, HarnessConfig
+
+config = HarnessConfig.ollama()  # Uses llama3.1:8b at localhost:11434
+engine = HarnessEngine(config)
+result = await engine.run("What is 2+2?")
+print(result.output)  # "The answer is 4."
+```
+
+Requirements:
+- Ollama installed: `https://ollama.com`
+- Model pulled: `ollama pull llama3.1`
 
 ---
 
 ## 🧪 Testing
 
 ```bash
-# Run full suite
+# Run full suite (mocked tests, no LLM required)
 pytest tests/ -v
+
+# Run LLM integration tests (requires running Ollama instance)
+pytest tests/test_llm_integration.py -v -m llm_integration
 
 # Run specific zone
 pytest tests/test_mcp/ -v
@@ -355,8 +375,12 @@ pytest tests/test_safety/ -v
 pytest tests/ --cov=sharp --cov-report=term-missing
 ```
 
+**Note:** 472 unit tests use mocked LLM responses and run without any external dependencies.
+8 additional LLM integration tests (`test_llm_integration.py`) require a running Ollama instance
+with `llama3.1:8b` pulled. CI runs only the mocked tests by default.
+
 ```
-tests/test_engine.py         18/18  ✓  Core Engine
+tests/test_engine.py         13/13  ✓  Core Engine
 tests/test_loop.py           20/20  ✓  ReAct Execution Loop
 tests/test_providers.py       9/9   ✓  LLM Providers
 tests/test_subagents.py      11/11  ✓  Sub-Agents
@@ -380,8 +404,18 @@ tests/test_async_helpers.py   7/7   ✓  Async Utilities
 tests/test_utils.py           5/5   ✓  Utilities
 tests/test_integration.py    14/14  ✓  End-to-End Integration
 tests/test_mcp/              18/18  ✓  MCP Module
+tests/test_orchestration.py  73/73  ✓  Orchestration
+tests/test_hooks.py          21/21  ✓  Hook System
+tests/test_artifacts.py      21/21  ✓  Artifact Manager
+tests/test_initializer.py     9/9   ✓  Initializer Agent
+tests/test_coding_agent.py   37/37  ✓  Coding Agent
+tests/test_multisession.py   12/12  ✓  Multi-Session
+tests/test_http_api.py       15/15  ✓  HTTP API
+tests/test_mcp_sharp_tools.py 14/14  ✓  MCP SHARP Tools
+tests/test_dashboard.py      36/36  ✓  Dashboard
+tests/test_orchestration.py  73/73  ✓  Orchestration Layer
 ─────────────────────────────────────
-Total:                      218/218  ✓  All Passing
+Total:                       472/472  ✓  All Passing
 ```
 
 ---
@@ -389,7 +423,7 @@ Total:                      218/218  ✓  All Passing
 ## 📦 Project Structure
 
 ```
-sharp/                          # Python package (52 modules, 5,335 lines)
+sharp/                          # Python package (52 modules, 8,648 lines)
 ├── __init__.py                 # Public API: HarnessEngine, HarnessConfig, errors
 ├── __main__.py                 # python -m sharp
 ├── cli.py                      # CLI: sharp run, sharp health, sharp config-show

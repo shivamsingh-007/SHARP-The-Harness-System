@@ -54,6 +54,15 @@ class InterfaceAdapter(ABC):
         """Return max context tokens for this interface."""
         return 8000
 
+    def _infer_task_type(self, raw: dict[str, Any]) -> TaskType | None:
+        """Infer task type from raw request data."""
+        if "task_type" in raw:
+            try:
+                return TaskType(raw["task_type"])
+            except ValueError:
+                pass
+        return None
+
 
 class ClaudeAppAdapter(InterfaceAdapter):
     """Adapter for Claude App (Mobile/Web) interface.
@@ -110,15 +119,6 @@ class ClaudeAppAdapter(InterfaceAdapter):
     def get_max_context_tokens(self) -> int:
         return 100000  # Claude has large context window
 
-    def _infer_task_type(self, raw: dict[str, Any]) -> TaskType | None:
-        """Infer task type from raw request metadata."""
-        if "task_type" in raw:
-            try:
-                return TaskType(raw["task_type"])
-            except ValueError:
-                pass
-        return None
-
 
 class ChatGPTAppAdapter(InterfaceAdapter):
     """Adapter for ChatGPT App (Mobile/Web) interface.
@@ -168,13 +168,6 @@ class ChatGPTAppAdapter(InterfaceAdapter):
     def get_max_context_tokens(self) -> int:
         return 128000  # GPT-4o context
 
-    def _infer_task_type(self, raw: dict[str, Any]) -> TaskType | None:
-        if "task_type" in raw:
-            try:
-                return TaskType(raw["task_type"])
-            except ValueError:
-                pass
-        return None
 
 
 class ClaudeCodeAdapter(InterfaceAdapter):
@@ -238,13 +231,6 @@ class ClaudeCodeAdapter(InterfaceAdapter):
     def get_max_context_tokens(self) -> int:
         return 200000  # Claude Code has largest context
 
-    def _infer_task_type(self, raw: dict[str, Any]) -> TaskType | None:
-        if "task_type" in raw:
-            try:
-                return TaskType(raw["task_type"])
-            except ValueError:
-                pass
-        return None
 
 
 class CustomAPIAdapter(InterfaceAdapter):
@@ -323,13 +309,6 @@ class CopilotAdapter(InterfaceAdapter):
     def get_max_context_tokens(self) -> int:
         return 128000
 
-    def _infer_task_type(self, raw: dict[str, Any]) -> TaskType | None:
-        if "task_type" in raw:
-            try:
-                return TaskType(raw["task_type"])
-            except ValueError:
-                pass
-        return None
 
 
 class VSCodeAIAdapter(InterfaceAdapter):
@@ -374,13 +353,6 @@ class VSCodeAIAdapter(InterfaceAdapter):
     def get_max_context_tokens(self) -> int:
         return 128000
 
-    def _infer_task_type(self, raw: dict[str, Any]) -> TaskType | None:
-        if "task_type" in raw:
-            try:
-                return TaskType(raw["task_type"])
-            except ValueError:
-                pass
-        return None
 
 
 class CursorAdapter(InterfaceAdapter):
@@ -442,13 +414,6 @@ class CursorAdapter(InterfaceAdapter):
     def get_max_context_tokens(self) -> int:
         return 200000
 
-    def _infer_task_type(self, raw: dict[str, Any]) -> TaskType | None:
-        if "task_type" in raw:
-            try:
-                return TaskType(raw["task_type"])
-            except ValueError:
-                pass
-        return None
 
 
 class WindsurfAdapter(InterfaceAdapter):
@@ -496,13 +461,6 @@ class WindsurfAdapter(InterfaceAdapter):
     def get_max_context_tokens(self) -> int:
         return 128000
 
-    def _infer_task_type(self, raw: dict[str, Any]) -> TaskType | None:
-        if "task_type" in raw:
-            try:
-                return TaskType(raw["task_type"])
-            except ValueError:
-                pass
-        return None
 
 
 # ── Adapter Registry ───────────────────────────────────────────────────

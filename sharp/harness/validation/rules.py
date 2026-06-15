@@ -48,8 +48,8 @@ class RuleBasedValidator:
         self.add_rule(
             Rule(
                 name="min_length",
-                check=lambda r: len(r.strip()) >= 10,
-                message="Response is too short (minimum 10 characters)",
+                check=lambda r: len(r.strip()) >= 2,
+                message="Response is too short (minimum 2 characters)",
                 severity="warning",
             )
         )

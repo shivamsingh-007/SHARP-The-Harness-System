@@ -150,6 +150,7 @@ class TestExecutionLoopRun:
         provider = AsyncMock()
         provider.complete = AsyncMock(return_value=MagicMock(
             content="Final Answer: The answer is 42.",
+            tool_calls=[],
         ))
 
         result = await loop.run(provider, "What is the answer?")
@@ -177,8 +178,8 @@ class TestExecutionLoopRun:
 
         provider = AsyncMock()
         provider.complete = AsyncMock(side_effect=[
-            MagicMock(content='Thought: I need to search\nAction: search(query="test")'),
-            MagicMock(content="Thought: Got results\nFinal Answer: Here are the results."),
+            MagicMock(content='Thought: I need to search\nAction: search(query="test")', tool_calls=[]),
+            MagicMock(content="Thought: Got results\nFinal Answer: Here are the results.", tool_calls=[]),
         ])
 
         result = await loop.run(provider, "Search for test")
@@ -196,6 +197,7 @@ class TestExecutionLoopRun:
         provider = AsyncMock()
         provider.complete = AsyncMock(return_value=MagicMock(
             content="Thought: Still thinking...",
+            tool_calls=[],
         ))
 
         result = await loop.run(provider, "Think hard")

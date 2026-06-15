@@ -30,6 +30,7 @@ class CodingConfig:
     project_root: str = "."
     max_feature_attempts: int = 3
     session_timeout_seconds: int = 3600
+    engine_config: dict[str, Any] | None = None  # HarnessConfig kwargs for real LLM
 
 
 @dataclass
@@ -428,12 +429,46 @@ class CodingAgent:
         return "\n".join(parts)
 
     def _execute_feature(self, feature: Feature, context: str) -> str:
-        """Execute the feature implementation.
+        """Execute the feature by calling the real LLM engine.
 
-        For now, this runs a test to verify the feature exists in code.
-        In a real implementation, this would call the LLM to generate code.
+        Uses HarnessEngine to generate code/implementation for the feature.
+        Falls back to shell test if no engine config is provided.
         """
-        # Run the feature's test command if available
+        import asyncio
+
+        from sharp.harness.core.config import HarnessConfig
+        from sharp.harness.core.engine import HarnessEngine
+
+        # Build the prompt for the LLM
+        prompt = (
+            f"Implement the following feature:\n\n"
+            f"Feature: {feature.id} - {feature.description}\n\n"
+            f"Context:\n{context}\n\n"
+            f"Steps to implement:\n"
+        )
+        for i, step in enumerate(feature.steps, 1):
+            prompt += f"  {i}. {step}\n"
+        prompt += (
+            f"\nProvide the complete implementation. "
+            f"Return only the code changes needed, no explanation."
+        )
+
+        # Try to use real engine if config is provided
+        if self.config.engine_config:
+            try:
+                engine_config = HarnessConfig(**self.config.engine_config)
+                engine = HarnessEngine(engine_config)
+                result = asyncio.get_event_loop().run_until_complete(
+                    engine.run(prompt)
+                )
+                if result.success and result.output:
+                    logger.info(f"LLM generated implementation for {feature.id}")
+                    return result.output
+                logger.warning(f"LLM returned empty/failed for {feature.id}: {result.error}")
+            except Exception as e:
+                logger.warning(f"LLM execution failed for {feature.id}: {e}")
+
+        # Fallback: run the feature's test command
         test_cmd = self._get_test_command(feature)
         if test_cmd:
             success, output = run_shell(test_cmd, cwd=self.project_root, timeout=30)

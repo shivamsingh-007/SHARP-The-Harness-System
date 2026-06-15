@@ -192,3 +192,34 @@ class HarnessConfig(BaseModel):
     def default(cls) -> HarnessConfig:
         """Return default configuration."""
         return cls()
+
+    @classmethod
+    def ollama(
+        cls,
+        model: str = "llama3.1:8b",
+        base_url: str = "http://localhost:11434",
+        **kwargs: Any,
+    ) -> HarnessConfig:
+        """Create config for a local Ollama model.
+
+        Args:
+            model: Ollama model name (e.g., "llama3.1:8b", "mistral", "codellama")
+            base_url: Ollama server URL
+            **kwargs: Additional LLMConfig overrides
+        """
+        return cls(
+            llm=LLMConfig(
+                provider="ollama",
+                model=f"ollama/{model}" if "/" not in model else model,
+                api_base=base_url,
+                api_key="ollama",  # LiteLLM requires a key, Ollama doesn't use it
+                temperature=kwargs.get("temperature", 0.7),
+                max_tokens=kwargs.get("max_tokens", 4096),
+                timeout=kwargs.get("timeout", 120.0),
+            ),
+            validation=ValidationConfig(
+                enabled=kwargs.get("validation_enabled", True),
+                llm_judge_enabled=False,  # Local models can't be judges
+            ),
+            mcp=MCPConfig(enabled=False),  # Disable MCP auto-connect for local
+        )

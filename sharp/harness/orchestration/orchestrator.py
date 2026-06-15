@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sharp.harness.core.engine import HarnessEngine
+from sharp.harness.core.config import HarnessConfig
 from sharp.harness.orchestration.types import (
     AuditEntry,
     ContextAggregation,
@@ -41,6 +42,7 @@ class OrchestratorConfig:
     max_retries: int = 2
     router_config: IntentRouterConfig = field(default_factory=IntentRouterConfig)
     aggregator_config: AggregatorConfig = field(default_factory=AggregatorConfig)
+    engine_config: HarnessConfig | None = None
 
 
 class Orchestrator:
@@ -159,32 +161,39 @@ class Orchestrator:
         # Build the prompt with aggregated context
         prompt = self._build_prompt(request, aggregation)
 
+        # Create engine with config matching the routing decision
+        if self.config.engine_config:
+            engine_config = self.config.engine_config
+        else:
+            engine_config = HarnessConfig.default()
+            engine_config.llm.model = routing_decision.recommended_model.value
+        engine_config.validation.enabled = self.config.enable_validation
+
+        engine = HarnessEngine(engine_config)
+
         # Execute with retry
         last_error = None
         for attempt in range(self.config.max_retries + 1):
             try:
-                # For now, simulate execution through SHARP's validation
-                # In a real integration, this would call HarnessEngine.run()
-                # or route to the actual model API
-                response = InterfaceResponse(
-                    success=True,
-                    output=f"[SHARP] Processed via {routing_decision.recommended_model.value}: {request.user_prompt[:200]}",
+                result = await engine.run(prompt)
+
+                end_time = datetime.now(timezone.utc)
+                latency_ms = (end_time - start_time).total_seconds() * 1000
+
+                return InterfaceResponse(
+                    success=result.success,
+                    output=result.output,
                     interface=request.interface,
                     model=routing_decision.recommended_model,
-                    latency_ms=0,
-                    tokens_input=len(prompt) // 4,
-                    tokens_output=100,
-                    cost_usd=routing_decision.estimated_cost_usd,
+                    latency_ms=latency_ms,
+                    tokens_input=result.total_tokens // 2 if result.total_tokens else len(prompt) // 4,
+                    tokens_output=result.total_tokens // 2 if result.total_tokens else 100,
+                    cost_usd=result.total_cost_usd,
                     retries=attempt,
-                    validation_passed=True,
-                    validation_score=1.0,
+                    validation_passed=result.validation_score >= 0.5 if result.validation_score else True,
+                    validation_score=result.validation_score or 1.0,
+                    error=result.error,
                 )
-
-                # Calculate actual latency
-                end_time = datetime.now(timezone.utc)
-                response.latency_ms = (end_time - start_time).total_seconds() * 1000
-
-                return response
 
             except Exception as e:
                 last_error = str(e)

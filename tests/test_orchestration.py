@@ -53,6 +53,11 @@ from sharp.harness.orchestration.audit import (
     AuditLogger,
     AuditLoggerConfig,
 )
+from sharp.harness.core.config import HarnessConfig
+
+
+# Use local Ollama for integration tests
+OLLAMA_CONFIG = HarnessConfig.ollama()
 
 
 # ── IntentRouter Tests ─────────────────────────────────────────────────
@@ -761,6 +766,7 @@ class TestOrchestrator:
         config = OrchestratorConfig(
             project_root=str(tmp_path),
             enable_audit_log=True,
+            engine_config=OLLAMA_CONFIG,
         )
         orch = Orchestrator(config)
 
@@ -768,7 +774,7 @@ class TestOrchestrator:
         result = await orch.handle_request(raw, InterfaceType.CLAUDE_APP)
 
         assert result["success"] is True
-        assert "Fixed" in result["content"] or "SHARP" in result["content"]
+        assert len(result.get("content", "")) > 0
 
     @pytest.mark.asyncio
     async def test_handle_chatgpt_request(self, tmp_path):
@@ -776,7 +782,7 @@ class TestOrchestrator:
         sharp_dir.mkdir()
         (sharp_dir / "__init__.py").write_text("", encoding="utf-8")
 
-        config = OrchestratorConfig(project_root=str(tmp_path))
+        config = OrchestratorConfig(project_root=str(tmp_path), engine_config=OLLAMA_CONFIG)
         orch = Orchestrator(config)
 
         raw = {"prompt": "what is Python?"}
@@ -790,7 +796,7 @@ class TestOrchestrator:
         sharp_dir.mkdir()
         (sharp_dir / "__init__.py").write_text("", encoding="utf-8")
 
-        config = OrchestratorConfig(project_root=str(tmp_path))
+        config = OrchestratorConfig(project_root=str(tmp_path), engine_config=OLLAMA_CONFIG)
         orch = Orchestrator(config)
 
         raw = {"prompt": "run the tests", "files_involved": ["test_main.py"]}
@@ -804,7 +810,11 @@ class TestOrchestrator:
         sharp_dir.mkdir()
         (sharp_dir / "__init__.py").write_text("", encoding="utf-8")
 
-        config = OrchestratorConfig(project_root=str(tmp_path), enable_audit_log=True)
+        config = OrchestratorConfig(
+            project_root=str(tmp_path),
+            enable_audit_log=True,
+            engine_config=OLLAMA_CONFIG,
+        )
         orch = Orchestrator(config)
 
         await orch.handle_request({"prompt": "test"}, InterfaceType.CLAUDE_APP)
@@ -821,7 +831,7 @@ class TestOrchestrator:
         sharp_dir.mkdir()
         (sharp_dir / "__init__.py").write_text("", encoding="utf-8")
 
-        config = OrchestratorConfig(project_root=str(tmp_path))
+        config = OrchestratorConfig(project_root=str(tmp_path), engine_config=OLLAMA_CONFIG)
         orch = Orchestrator(config)
 
         await orch.handle_request({"prompt": "test1"}, InterfaceType.CLAUDE_APP)
@@ -842,6 +852,7 @@ class TestOrchestrator:
             project_root=str(tmp_path),
             enable_audit_log=True,
             enable_validation=True,
+            engine_config=OLLAMA_CONFIG,
         )
         orch = Orchestrator(config)
 
@@ -867,7 +878,6 @@ class TestOrchestrator:
         # Performance tracked
         perf = orch.get_performance()
         assert perf.total_requests >= 1
-        assert perf.total_cost_usd > 0
 
     @pytest.mark.asyncio
     async def test_performance_by_model(self, tmp_path):
@@ -875,7 +885,7 @@ class TestOrchestrator:
         sharp_dir.mkdir()
         (sharp_dir / "__init__.py").write_text("", encoding="utf-8")
 
-        config = OrchestratorConfig(project_root=str(tmp_path))
+        config = OrchestratorConfig(project_root=str(tmp_path), engine_config=OLLAMA_CONFIG)
         orch = Orchestrator(config)
 
         await orch.handle_request({"prompt": "fix bug"}, InterfaceType.CLAUDE_APP)
@@ -890,7 +900,7 @@ class TestOrchestrator:
         sharp_dir.mkdir()
         (sharp_dir / "__init__.py").write_text("", encoding="utf-8")
 
-        config = OrchestratorConfig(project_root=str(tmp_path))
+        config = OrchestratorConfig(project_root=str(tmp_path), engine_config=OLLAMA_CONFIG)
         orch = Orchestrator(config)
 
         await orch.handle_request({"prompt": "test"}, InterfaceType.CLAUDE_APP)
