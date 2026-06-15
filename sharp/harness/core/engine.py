@@ -19,6 +19,7 @@ from sharp.harness.execution.loop import ExecutionLoop, LoopState
 from sharp.harness.execution.providers import LLMProvider
 from sharp.harness.execution.tools import ToolRegistry
 from sharp.harness.execution.subagents import SubAgentManager, SubAgentDefinition
+from sharp.harness.execution.hooks import HookRegistry, HookEvent, HookContext
 from sharp.harness.validation.validator import ResponseValidator
 from sharp.harness.validation.retry import RetryEngine
 from sharp.harness.safety.circuit_breaker import CircuitBreaker
@@ -65,6 +66,7 @@ class HarnessEngine:
         self.budget_manager = BudgetManager(self.config.safety)
         self.checkpoint_manager = CheckpointManager(self.config.state)
         self.metrics = MetricsCollector(self.config.observability)
+        self.hooks = HookRegistry()
 
         # MCP integration
         self.mcp_client = MCPClient(self.config.mcp)
@@ -389,6 +391,21 @@ class HarnessEngine:
             if self.config.mcp.enabled and self.config.mcp.auto_discover and not self._mcp_connected:
                 await self.connect_mcp_servers()
 
+            # Fire session_start hook
+            session_ctx = await self.hooks.fire(HookEvent.SESSION_START, HookContext(
+                event=HookEvent.SESSION_START,
+                data={"user_request": user_request, "trace_id": self._trace_id},
+            ))
+            if session_ctx.cancel:
+                logger.info("Session cancelled by session_start hook")
+                return HarnessResult(
+                    success=False,
+                    output="",
+                    total_latency_ms=(time.time() - start_time) * 1000,
+                    error="Session cancelled by hook",
+                    trace_id=self._trace_id,
+                )
+
             # Load checkpoint if available
             checkpoint = self.checkpoint_manager.load(self._trace_id)
 
@@ -440,6 +457,17 @@ class HarnessEngine:
             # Store output for future context
             self._prior_outputs.append(result.output)
 
+            # Fire session_end hook
+            await self.hooks.fire(HookEvent.SESSION_END, HookContext(
+                event=HookEvent.SESSION_END,
+                data={
+                    "trace_id": self._trace_id,
+                    "output": result.output,
+                    "success": True,
+                    "attempts": result.attempts,
+                },
+            ))
+
             return HarnessResult(
                 success=True,
                 output=result.output,
@@ -454,6 +482,10 @@ class HarnessEngine:
         except (CircuitBreakerOpenError, BudgetExceededError) as e:
             elapsed_ms = (time.time() - start_time) * 1000
             self.metrics.end_trace(self._trace_id, success=False, latency_ms=elapsed_ms)
+            await self.hooks.fire(HookEvent.SESSION_END, HookContext(
+                event=HookEvent.SESSION_END,
+                data={"trace_id": self._trace_id, "success": False, "error": str(e)},
+            ))
             return HarnessResult(
                 success=False,
                 output="",
@@ -505,6 +537,15 @@ class HarnessEngine:
 
             provider = LLMProvider(self.config.llm)
 
+            # Fire before_execute hook
+            before_ctx = await self.hooks.fire(HookEvent.BEFORE_EXECUTE, HookContext(
+                event=HookEvent.BEFORE_EXECUTE,
+                data={"attempt": attempt, "user_request": user_request},
+            ))
+            if before_ctx.cancel:
+                logger.info("Execution cancelled by before_execute hook")
+                break
+
             # Use execution loop if tools are available and strategy is react
             has_tools = bool(self._tools) and self.config.prompt.include_tools_in_prompt
             use_loop = has_tools and self.config.execution.loop_strategy.value == "react"
@@ -548,6 +589,16 @@ class HarnessEngine:
             )
 
             if validation.passed:
+                # Fire after_execute hook
+                await self.hooks.fire(HookEvent.AFTER_EXECUTE, HookContext(
+                    event=HookEvent.AFTER_EXECUTE,
+                    data={
+                        "attempt": attempt,
+                        "output": output,
+                        "validation_score": validation.score,
+                    },
+                ))
+
                 return _ExecutionResult(
                     output=output,
                     attempts=attempt,
@@ -560,8 +611,28 @@ class HarnessEngine:
             last_error = "; ".join(validation.issues)
             logger.warning(f"Validation failed (attempt {attempt}): {last_error}")
 
+            # Fire on_validation_failure hook
+            await self.hooks.fire(HookEvent.ON_VALIDATION_FAILURE, HookContext(
+                event=HookEvent.ON_VALIDATION_FAILURE,
+                data={
+                    "attempt": attempt,
+                    "issues": validation.issues,
+                    "score": validation.score,
+                    "output": output,
+                },
+            ))
+
             # Check if we should retry
             if attempt < max_attempts:
+                # Fire on_retry hook
+                await self.hooks.fire(HookEvent.ON_RETRY, HookContext(
+                    event=HookEvent.ON_RETRY,
+                    data={
+                        "attempt": attempt,
+                        "validation_result": validation,
+                    },
+                ))
+
                 mutated = self.retry_engine.mutate_for_retry(
                     original_prompt=augmented_prompt,
                     validation_result=validation,

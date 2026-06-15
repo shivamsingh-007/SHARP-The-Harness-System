@@ -1,0 +1,265 @@
+{
+  "version": "2.0",
+  "project": "SHARP Harness System",
+  "created": "2026-06-15",
+  "karpathy_principles": [
+    "Think Before Coding",
+    "Simplicity First",
+    "Surgical Changes",
+    "Goal-Driven Execution"
+  ],
+  "checks": [
+    {
+      "id": "01",
+      "category": "core",
+      "description": "Engine initializes with default config",
+      "test_command": "python -c \"from sharp import HarnessEngine; e = HarnessEngine(); print('PASS')\"",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "02",
+      "category": "core",
+      "description": "Engine runs full pipeline without LLM call",
+      "test_command": "python -c \"import asyncio; from sharp import HarnessEngine; r=asyncio.run(HarnessEngine().run('test')); print('PASS' if r else 'FAIL')\"",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "03",
+      "category": "core",
+      "description": "HarnessConfig loads from harness.yaml",
+      "test_command": "python -c \"from sharp import HarnessConfig; c=HarnessConfig.from_yaml('harness.yaml'); print('PASS')\"",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "04",
+      "category": "context",
+      "description": "Context curator gathers sources and compresses",
+      "test_command": "python -m pytest tests/test_context.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "05",
+      "category": "context",
+      "description": "Memory manager loads and persists state",
+      "test_command": "python -m pytest tests/test_memory.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "06",
+      "category": "prompt",
+      "description": "Prompt composer assembles system + context + tools",
+      "test_command": "python -m pytest tests/test_prompt.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "07",
+      "category": "execution",
+      "description": "ReAct loop executes Think-Act-Observe cycle",
+      "test_command": "python -m pytest tests/test_loop.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "08",
+      "category": "execution",
+      "description": "Tool registry registers and dispatches tools",
+      "test_command": "python -c \"from sharp.harness.execution.tools import ToolRegistry; r=ToolRegistry(); print('PASS')\"",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "09",
+      "category": "execution",
+      "description": "Sub-agent manager spawns and returns results",
+      "test_command": "python -m pytest tests/test_subagents.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "10",
+      "category": "execution",
+      "description": "LLM provider adapter calls OpenRouter/Anthropic",
+      "test_command": "python -m pytest tests/test_providers.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "11",
+      "category": "validation",
+      "description": "Rule-based validator checks responses",
+      "test_command": "python -m pytest tests/test_validation.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "12",
+      "category": "validation",
+      "description": "LLM-as-judge evaluates response quality",
+      "test_command": "python -m pytest tests/test_judge.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "13",
+      "category": "validation",
+      "description": "Retry engine mutates context on failure",
+      "test_command": "python -m pytest tests/test_retry.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "14",
+      "category": "safety",
+      "description": "Circuit breaker trips and recovers",
+      "test_command": "python -m pytest tests/test_safety.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "15",
+      "category": "safety",
+      "description": "Budget manager enforces token/cost limits",
+      "test_command": "python -c \"from sharp.harness.safety.budget import BudgetManager; print('PASS')\"",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "16",
+      "category": "state",
+      "description": "Checkpoint manager saves and loads state",
+      "test_command": "python -m pytest tests/test_checkpoint.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "17",
+      "category": "state",
+      "description": "Session manager handles lifecycle",
+      "test_command": "python -m pytest tests/test_session.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "18",
+      "category": "mcp",
+      "description": "MCP client connects to servers",
+      "test_command": "python -m pytest tests/test_mcp/ -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "19",
+      "category": "mcp",
+      "description": "MCP bridge converts tools/resources to SHARP format",
+      "test_command": "python -c \"from sharp.harness.mcp.bridge import MCPToToolBridge; print('PASS')\"",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "20",
+      "category": "observability",
+      "description": "Metrics collector tracks traces",
+      "test_command": "python -m pytest tests/test_metrics.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "21",
+      "category": "integration",
+      "description": "Full pipeline end-to-end (context -> prompt -> execute -> validate)",
+      "test_command": "python -m pytest tests/test_integration.py -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "22",
+      "category": "orchestration",
+      "description": "IntentRouter classifies tasks and selects model",
+      "test_command": "python -m pytest tests/test_orchestration.py -k router -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "23",
+      "category": "orchestration",
+      "description": "Interface adapters normalize Claude/ChatGPT/ClaudeCode requests",
+      "test_command": "python -m pytest tests/test_orchestration.py -k adapter -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "24",
+      "category": "orchestration",
+      "description": "ContextAggregator merges git, files, progress, histories",
+      "test_command": "python -m pytest tests/test_orchestration.py -k aggregator -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "25",
+      "category": "orchestration",
+      "description": "Orchestrator handles request end-to-end across interfaces",
+      "test_command": "python -m pytest tests/test_orchestration.py -k orchestrator -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "26",
+      "category": "orchestration",
+      "description": "AuditLogger writes JSON-lines trace of every decision",
+      "test_command": "python -m pytest tests/test_orchestration.py -k audit -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "27",
+      "category": "orchestration",
+      "description": "PerformanceTracker computes per-model/interface metrics",
+      "test_command": "python -m pytest tests/test_orchestration.py -k performance -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    },
+    {
+      "id": "28",
+      "category": "orchestration",
+      "description": "Full pipeline: interface request -> route -> context -> execute -> validate -> respond",
+      "test_command": "python -m pytest tests/test_orchestration.py -k pipeline -q --tb=short",
+      "passes": false,
+      "last_tested": null,
+      "evidence_id": null
+    }
+  ]
+}
