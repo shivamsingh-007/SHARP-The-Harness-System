@@ -1,6 +1,6 @@
 <div align="center">
 
-# SHARP
+<img src="assets/sharp-banner.svg" alt="SHARP — System for Harnessing Augmented Reasoning" width="100%" />
 
 **A modular orchestration framework for LLM tools and agents.**
 
