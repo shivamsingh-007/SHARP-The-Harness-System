@@ -1,8 +1,9 @@
-"""Metrics collector - cost, latency, tokens."""
+"""Metrics collector - cost, latency, tokens, error classification."""
 
 from __future__ import annotations
 
 import time
+from enum import Enum
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -10,6 +11,64 @@ from sharp.harness.core.config import ObservabilityConfig
 from sharp.harness.observability.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+class ErrorClass(str, Enum):
+    """Classification of errors by cause."""
+
+    PROVIDER = "provider"
+    TOOL = "tool"
+    VALIDATION = "validation"
+    TIMEOUT = "timeout"
+    AUTH = "auth"
+    CONFIG = "config"
+    UNKNOWN = "unknown"
+
+
+def classify_error(error: Exception) -> ErrorClass:
+    """Classify an exception into an error category.
+
+    Uses exception type and message heuristics.
+    """
+    error_type = type(error).__name__.lower()
+    error_msg = str(error).lower()
+
+    # Timeout
+    if "timeout" in error_type or "timeout" in error_msg:
+        return ErrorClass.TIMEOUT
+    if isinstance(error, TimeoutError):
+        return ErrorClass.TIMEOUT
+
+    # Auth
+    if "auth" in error_msg or "unauthorized" in error_msg or "401" in error_msg:
+        return ErrorClass.AUTH
+    if isinstance(error, PermissionError):
+        return ErrorClass.AUTH
+
+    # Config
+    if "config" in error_msg or "missing" in error_msg and "key" in error_msg:
+        return ErrorClass.CONFIG
+    if isinstance(error, (ValueError, KeyError)) and "config" in error_msg:
+        return ErrorClass.CONFIG
+
+    # Provider (LLM/API errors)
+    provider_keywords = ["openai", "anthropic", "litellm", "api", "rate limit", "quota", "model"]
+    if any(kw in error_msg for kw in provider_keywords):
+        return ErrorClass.PROVIDER
+    if isinstance(error, (ConnectionError, ConnectionRefusedError, ConnectionResetError)):
+        return ErrorClass.PROVIDER
+
+    # Tool
+    tool_keywords = ["tool", "execution", "command", "subprocess", "file", "permission denied"]
+    if any(kw in error_msg for kw in tool_keywords):
+        return ErrorClass.TOOL
+
+    # Validation
+    validation_keywords = ["validation", "judge", "score", "schema", "parse"]
+    if any(kw in error_msg for kw in validation_keywords):
+        return ErrorClass.VALIDATION
+
+    return ErrorClass.UNKNOWN
 
 
 @dataclass
@@ -23,6 +82,7 @@ class TraceMetrics:
     tokens_used: int = 0
     cost_usd: float = 0.0
     success: bool = True
+    error_class: ErrorClass | None = None
     metadata: dict[str, Any] = field(default_factory=dict)
 
 
@@ -55,6 +115,7 @@ class MetricsCollector:
         latency_ms: float = 0.0,
         tokens: int = 0,
         cost: float = 0.0,
+        error_class: ErrorClass | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
         """End tracking a trace and record token/cost data."""
@@ -67,6 +128,7 @@ class MetricsCollector:
         trace.success = success
         trace.tokens_used = tokens
         trace.cost_usd = cost
+        trace.error_class = error_class
         if metadata:
             trace.metadata.update(metadata)
 

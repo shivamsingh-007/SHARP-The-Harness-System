@@ -1,13 +1,84 @@
-"""OpenTelemetry tracing (optional)."""
+"""OpenTelemetry tracing (optional) and in-memory span tracker."""
 
 from __future__ import annotations
 
+import time
 from contextlib import contextmanager
+from dataclasses import dataclass, field
 from typing import Any, Generator
 
 from sharp.harness.observability.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+@dataclass
+class SpanRecord:
+    """Record of a single span."""
+
+    name: str
+    trace_id: str
+    start_time: float = 0.0
+    end_time: float = 0.0
+    duration_ms: float = 0.0
+    parent_name: str | None = None
+    status: str = "ok"
+    attributes: dict[str, Any] = field(default_factory=dict)
+
+
+class SpanTracker:
+    """In-memory span tracker that works without OpenTelemetry.
+
+    Records span name, duration, parent-child hierarchy, and status.
+    Queryable: get_spans_for_trace(trace_id).
+    """
+
+    def __init__(self) -> None:
+        self._spans: list[SpanRecord] = []
+        self._current_parent: str | None = None
+
+    @contextmanager
+    def span(
+        self,
+        name: str,
+        trace_id: str = "",
+        attributes: dict[str, Any] | None = None,
+    ) -> Generator[SpanRecord, None, None]:
+        """Create and track a span."""
+        record = SpanRecord(
+            name=name,
+            trace_id=trace_id,
+            start_time=time.time(),
+            parent_name=self._current_parent,
+            attributes=attributes or {},
+        )
+
+        old_parent = self._current_parent
+        self._current_parent = name
+
+        try:
+            yield record
+            record.status = "ok"
+        except Exception as e:
+            record.status = f"error: {type(e).__name__}"
+            raise
+        finally:
+            record.end_time = time.time()
+            record.duration_ms = (record.end_time - record.start_time) * 1000
+            self._spans.append(record)
+            self._current_parent = old_parent
+
+    def get_spans_for_trace(self, trace_id: str) -> list[SpanRecord]:
+        """Get all spans for a given trace ID."""
+        return [s for s in self._spans if s.trace_id == trace_id]
+
+    def get_all_spans(self) -> list[SpanRecord]:
+        """Get all recorded spans."""
+        return list(self._spans)
+
+    def clear(self) -> None:
+        """Clear all recorded spans."""
+        self._spans.clear()
 
 
 class Tracer:
