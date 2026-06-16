@@ -1,96 +1,80 @@
 # Quickstart
 
-Get SHARP running with a local LLM in under 2 minutes.
+Run SHARP with one model and one tool loop in under 5 minutes.
 
-## Prerequisites
+## Who this is for
 
-- Python 3.11+
-- [Ollama](https://ollama.com) installed and running
+Use this if you want to run SHARP with one model and one tool loop.
 
-## 1. Install SHARP
+Do not start here if you need dashboard, MCP, or custom validators.
+
+## Install
 
 ```bash
 git clone https://github.com/shivamsingh-007/SHARP-The-Harness-System.git
 cd SHARP-The-Harness-System
+pip install -e .
+```
+
+Python 3.11+ required. For development:
+
+```bash
 pip install -e ".[dev]"
 ```
 
-## 2. Pull a model
+## Set one provider
+
+SHARP uses GitHub Models API by default. Set one env var:
 
 ```bash
-ollama pull llama3.1
+export GITHUB_TOKEN=your_token_here
 ```
 
-This downloads ~4.9 GB. Only needed once.
-
-## 3. Run your first query
+## Run the minimal script
 
 ```bash
-sharp run "What is 2+2?"
+python examples/minimal.py
 ```
 
-Or with Python directly:
+Or write it inline:
 
 ```python
 import asyncio
-from sharp import HarnessEngine, HarnessConfig
+from sharp.harness import Harness, HarnessConfig
 
 async def main():
-    config = HarnessConfig.ollama()
-    engine = HarnessEngine(config)
-    result = await engine.run("What is 2+2?")
-    print(result.output)
+    config = HarnessConfig.github_models(model="gpt-4o-mini")
+    async with Harness(config=config) as engine:
+        result = await engine.run(
+            "Summarize why rate limiting matters in one paragraph."
+        )
+        print(result.output)
+        print(f"\nTokens: {result.total_tokens} | Cost: ${result.total_cost_usd:.4f}")
 
 asyncio.run(main())
 ```
 
-## 4. Use tools
+## Expected output
+
+```
+Rate limiting matters because it protects services from overload,
+abuse, and noisy-neighbor traffic...
+
+Tokens: 42 | Cost: $0.0001
+```
+
+## Common failure
+
+**`ValueError: No GitHub token found`** — set the env var:
 
 ```bash
-sharp run "List files in the current directory"
-sharp run "What time is it in UTC?"
-sharp run "Calculate 15 * 37"
+export GITHUB_TOKEN=ghp_your_token_here
 ```
 
-## 5. Run with a config file
+## Next paths
 
-```bash
-sharp run "Explain Python decorators" --config harness.yaml
-```
-
-See `harness.yaml` in the repo root for an example config.
-
-## Common options
-
-| Flag | Description |
-|---|---|
-| `--model`, `-m` | Override the LLM model |
-| `--config`, `-c` | Path to a YAML config file |
-| `--verbose`, `-v` | Enable debug logging |
-
-## Switching providers
-
-```python
-# OpenAI
-config = HarnessConfig()
-config.llm.provider = "openai"
-config.llm.model = "gpt-4o"
-config.llm.api_key = "sk-..."
-
-# Anthropic
-config = HarnessConfig()
-config.llm.provider = "anthropic"
-config.llm.model = "claude-3-5-sonnet-20241022"
-config.llm.api_key = "sk-ant-..."
-
-# Ollama (local, no key needed)
-config = HarnessConfig.ollama()
-```
-
-## Troubleshooting
-
-**"Connection refused"** — Ollama isn't running. Start it with `ollama serve`.
-
-**Slow responses** — First request is slow as the model loads into VRAM. Subsequent requests are faster.
-
-**Out of memory** — Use a smaller model: `ollama pull llama3.2:3b` then `config = HarnessConfig.ollama(model="llama3.2:3b")`.
+- **Want YAML config?** → [CONFIG_CONTRACT.md](CONFIG_CONTRACT.md)
+- **Want the HTTP API?** → [CANONICAL_EXAMPLES.md](CANONICAL_EXAMPLES.md) (Example 2)
+- **Want MCP?** → [EXTENDING.md](EXTENDING.md)
+- **Want custom tools?** → [EXTENDING.md](EXTENDING.md)
+- **Want local models (Ollama)?** → `HarnessConfig.ollama(model="llama3.1:8b")`
