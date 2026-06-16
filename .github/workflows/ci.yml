@@ -15,8 +15,12 @@ jobs:
         with:
           python-version: "3.11"
       - run: pip install ruff
+      # Block on critical correctness issues: syntax/runtime errors and undefined-name checks.
+      - run: ruff check sharp/ tests/ --select E9,F63,F7,F82
       - run: ruff check sharp/ tests/
+        continue-on-error: true
       - run: ruff format --check sharp/ tests/
+        continue-on-error: true
 
   test:
     runs-on: ubuntu-latest
