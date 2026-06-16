@@ -203,7 +203,7 @@ config = HarnessConfig(unknown_field="value")
 | `args` | list | `[]` | Stable | Command arguments |
 | `env` | dict | `{}` | Stable | Environment variables |
 | `url` | str \| None | None | Stable | SSE/Streamable HTTP URL |
-| `transport` | str | `"stdio"` | Stable | `"stdio"` or `"sse"` |
+| `transport` | str | `"stdio"` | Stable | `"stdio"` or `"http"` |
 | `enabled` | bool | `True` | Stable | Whether to connect |
 | `description` | str | `""` | Stable | Human-readable description |
 

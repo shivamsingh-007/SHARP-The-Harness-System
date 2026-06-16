@@ -33,13 +33,24 @@ engine.run(user_request)
 | `execution/loop.py` | ReAct execution loop | Internal |
 | `execution/providers.py` | LiteLLM provider wrapper | Internal |
 | `execution/tools.py` | Tool registry and governance | Internal |
-| `validation/validator.py` | Combined validation pipeline | Internal |
 | `execution/hooks.py` | Lifecycle hook system | Yes (via `engine.hooks`) |
+| `execution/subagents.py` | Sub-agent spawning | Internal |
+| `context/curator.py` | Context source curation | Internal |
+| `prompt/composer.py` | Augmented prompt assembly | Internal |
+| `validation/validator.py` | Combined validation pipeline | Internal |
+| `validation/judge.py` | LLM-as-judge evaluation | Internal |
+| `validation/rules.py` | Rule-based validation | Internal |
 | `mcp/bridge.py` | MCP ↔ SHARP tool bridge | Internal |
+| `mcp/client.py` | MCP server connections | Internal |
 | `orchestration/orchestrator.py` | Multi-interface routing | Yes (`Orchestrator`) |
+| `agents/coding.py` | DPEVR coding agent | Internal |
 | `dashboard/server.py` | FastAPI HTTP + WebSocket | Internal |
 | `observability/metrics.py` | Trace metrics collection | Internal |
 | `safety/circuit_breaker.py` | Failure detection + recovery | Internal |
+| `safety/budget.py` | Token/cost budget enforcement | Internal |
+| `state/checkpoint.py` | Checkpoint persistence | Internal |
+| `benchmarks/harness_bench.py` | Benchmark runner | Internal |
+| `artifacts/manager.py` | Feature/progress tracking | Internal |
 
 ## Extension points
 

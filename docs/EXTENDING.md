@@ -86,7 +86,7 @@ config.validation.min_score = 0.7
 Custom rule:
 
 ```python
-from sharp.harness.validation.validator import Rule, RuleBasedValidator
+from sharp.harness.validation.rules import Rule, RuleBasedValidator
 
 validator = RuleBasedValidator()
 validator.add_rule(Rule(
