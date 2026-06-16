@@ -15,7 +15,7 @@ A general-purpose orchestration framework for LLM tools and agents with context 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-00FF00?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Version: 0.2.0](https://img.shields.io/badge/Version-0.2%20Dev%20Preview-FF6B35?style=for-the-badge)](#-testing)
-[![Tests: 493/493](https://img.shields.io/badge/Tests-493%20passed-44CC11?style=for-the-badge&logo=pytest&logoColor=white)](#-testing)
+[![Tests: 603/603](https://img.shields.io/badge/Tests-603%20passed-44CC11?style=for-the-badge&logo=pytest&logoColor=white)](#-testing)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-FF6B35?style=for-the-badge&logo=modelcontextprotocol&logoColor=white)](#-mcp-integration)
 [![Code: 10,871 LOC](https://img.shields.io/badge/Engine-10,871%20lines-8B5CF6?style=for-the-badge)](#-architecture)
 
@@ -382,7 +382,7 @@ pytest tests/test_safety/ -v
 pytest tests/ --cov=sharp --cov-report=term-missing
 ```
 
-**Note:** 493 unit tests use mocked LLM responses and verify **plumbing, not intelligence** — they prove components connect and control flow works correctly.
+**Note:** 603 unit tests use mocked LLM responses and verify **plumbing, not intelligence** — they prove components connect and control flow works correctly.
 10 LLM integration tests (`test_llm_integration.py`) use GitHub Models API with `gpt-4o-mini` and verify **shape and coarse correctness** of real LLM output.
 CI runs only the mocked tests by default.
 
@@ -417,12 +417,16 @@ tests/test_artifacts.py      21/21  ✓  Artifact Manager
 tests/test_initializer.py     9/9   ✓  Initializer Agent
 tests/test_coding_agent.py   37/37  ✓  Coding Agent
 tests/test_multisession.py   12/12  ✓  Multi-Session
-tests/test_http_api.py       15/15  ✓  HTTP API
+tests/test_http_api.py       28/28  ✓  HTTP API
+tests/test_mcp_client.py     47/47  ✓  MCP Client
 tests/test_mcp_sharp_tools.py 14/14  ✓  MCP SHARP Tools
+tests/test_persistence.py    20/20  ✓  Persistence
+tests/test_observability.py  25/25  ✓  Observability
+tests/test_benchmark.py      12/12  ✓  Benchmark Harness
 tests/test_dashboard.py      36/36  ✓  Dashboard
 tests/test_orchestration.py  73/73  ✓  Orchestration Layer
-─────────────────────────────────────
-Total:                       493/493  ✓  All Passing
+
+Total:                       603/603  ✓  All Passing
 ```
 
 ---

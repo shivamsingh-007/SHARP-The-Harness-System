@@ -45,7 +45,7 @@
 | Context curation | Stable | Priority-based source selection, truncation, deduplication |
 | Prompt composition | Stable | System prompt + tools + context assembly |
 | Rule-based validation | Stable | Empty check, length check, hallucination markers |
-| Unit tests | Stable | 493 tests, well-organized, mocked LLM |
+| Unit tests | Stable | 603 tests, well-organized, mocked LLM |
 | LLM integration | Experimental | Requires Ollama, 11 approval-style tests |
 | Orchestrator | Experimental | Routes across interfaces, creates engine per request |
 | Coding agent | Experimental | DPEVR loop, async path has known issues |

@@ -15,7 +15,7 @@
 ### Truthful capability framing updated
 - CoT/ToT strategies raise `NotImplementedError` (were silently ignored)
 - PRODUCT_CONTRACT.md corrected (judge behavior, auth status)
-- README metrics updated to actual counts (73 files, 10,871 lines, 493 tests)
+- README metrics updated to actual counts (73 files, 10,871 lines, 603 tests)
 - Architecture table includes all 15 zones
 
 ### CI and contract tests added
@@ -29,6 +29,11 @@
 ### Removed
 - Unused dependencies: `aiofiles`, `httpx`
 
-### Deferred to next maintenance pass
-- Per-test metrics tracking (timing output to `test-results.json`)
-- Reproducible benchmark harness
+### Gap-fill: critical coverage added (post-release)
+- 47 MCP client tests (connection lifecycle, tool routing, error handling, discovery)
+- 13 HTTP API isolation tests (auth enforcement, rate limiting, CORS, WebSocket auth, concurrency)
+- 13 persistence restart survival tests (restart durability, corruption detection, key sanitization)
+- 25 observability tests (error classification, span tracker, metrics, telemetry)
+- Benchmark harness with reproducible runs, baseline comparison, labeled results
+- Pytest timing plugin writing per-test duration to `test-results.json`
+- Test count: 493 → 603

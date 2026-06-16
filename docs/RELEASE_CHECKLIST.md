@@ -21,7 +21,7 @@
 
 ### Documentation
 - [x] PRODUCT_CONTRACT.md exists and is accurate (v0.2.0)
-- [x] README.md metrics verified against repository scan (73 files, 10,871 lines, 493 tests)
+- [x] README.md metrics verified against repository scan (73 files, 10,871 lines, 603 tests)
 - [x] ARCHITECTURE.md documents all 15 zones
 - [x] LIMITATIONS.md lists known limitations honestly
 - [x] CHANGELOG.md documents v0.2.0 changes
