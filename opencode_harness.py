@@ -109,11 +109,31 @@ class OpenCodeHarness:
 
         @self.engine.tool(risk_level=RiskLevel.EXECUTE, timeout=30.0, requires_approval=True)
         async def run_command(command: str, cwd: str = ".") -> str:
-            """Execute a shell command and return its output."""
+            """Execute a command safely with allowlist enforcement.
+
+            Uses shell=False with argument list.
+            """
+            import shlex
+            from sharp.harness.agents.coding import ALLOWED_COMMANDS
+
+            if not command.strip():
+                return "Error: Empty command"
+
+            try:
+                parts = shlex.split(command)
+            except ValueError as e:
+                return f"Error: Invalid command syntax: {e}"
+
+            if not parts:
+                return "Error: Empty command"
+
+            cmd_name = Path(parts[0]).name
+            if cmd_name not in ALLOWED_COMMANDS:
+                return f"Error: Command not allowed: {cmd_name}. Allowed: {sorted(ALLOWED_COMMANDS)}"
+
             try:
                 result = subprocess.run(
-                    command,
-                    shell=True,
+                    parts,
                     cwd=cwd,
                     capture_output=True,
                     text=True,

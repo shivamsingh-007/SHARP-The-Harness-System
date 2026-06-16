@@ -64,6 +64,7 @@ class Orchestrator:
         self._adapters: dict[InterfaceType, InterfaceAdapter] = {}
         self._audit_log: list[AuditEntry] = []
         self._performance: _PerformanceTracker = _PerformanceTracker()
+        self._engine: HarnessEngine | None = None
 
     def get_adapter(self, interface: InterfaceType) -> InterfaceAdapter:
         """Get or create an adapter for the given interface."""
@@ -161,15 +162,21 @@ class Orchestrator:
         # Build the prompt with aggregated context
         prompt = self._build_prompt(request, aggregation)
 
-        # Create engine with config matching the routing decision
-        if self.config.engine_config:
-            engine_config = self.config.engine_config
-        else:
-            engine_config = HarnessConfig.default()
+        # Create or reuse engine with config matching the routing decision
+        if self._engine is None:
+            if self.config.engine_config:
+                engine_config = self.config.engine_config.model_copy(deep=True)
+            else:
+                engine_config = HarnessConfig.default()
             engine_config.llm.model = routing_decision.recommended_model.value
-        engine_config.validation.enabled = self.config.enable_validation
+            engine_config.validation.enabled = self.config.enable_validation
+            self._engine = HarnessEngine(engine_config)
+        else:
+            # Update model for this request without mutating shared config
+            self._engine.config.llm.model = routing_decision.recommended_model.value
+            self._engine.config.validation.enabled = self.config.enable_validation
 
-        engine = HarnessEngine(engine_config)
+        engine = self._engine
 
         # Execute with retry
         last_error = None

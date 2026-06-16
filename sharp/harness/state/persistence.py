@@ -56,8 +56,17 @@ class FileBackend:
 
     @staticmethod
     def _sanitize_key(key: str) -> str:
-        """Sanitize key for filesystem (replace colons with dashes)."""
-        return key.replace(":", "-")
+        """Sanitize key for filesystem.
+
+        Rejects keys containing path traversal, null bytes, or absolute paths.
+        """
+        if "\0" in key:
+            raise ValueError(f"Invalid key: contains null byte")
+        if key.startswith("/") or key.startswith("\\"):
+            raise ValueError(f"Invalid key: absolute path not allowed: {key}")
+        if ".." in key:
+            raise ValueError(f"Invalid key: path traversal not allowed: {key}")
+        return key.replace(":", "-").replace("/", "-").replace("\\", "-")
 
 
 class RedisBackend:

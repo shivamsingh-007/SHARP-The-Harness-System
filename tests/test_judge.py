@@ -62,7 +62,8 @@ class TestLLMJudgeEvaluate:
         judge.provider.complete = AsyncMock(side_effect=Exception("LLM error"))
 
         result = await judge.evaluate("response", "request")
-        assert result.passed is True  # Fallback to pass on error
+        assert result.passed is False  # Fail closed on error (HIGH-2 fix)
+        assert result.score == 0.0
         assert "failed" in result.feedback.lower()
 
     @pytest.mark.asyncio
@@ -75,5 +76,6 @@ class TestLLMJudgeEvaluate:
         judge.provider.complete = AsyncMock(return_value=mock_response)
 
         result = await judge.evaluate("response", "request")
-        # Should fallback gracefully
-        assert result.passed is True
+        # Fail closed on invalid JSON (HIGH-2 fix)
+        assert result.passed is False
+        assert result.score == 0.0

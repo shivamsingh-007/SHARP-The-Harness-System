@@ -45,22 +45,25 @@ def _make_agent(tmp_path, features=None, max_attempts=3):
 
 class TestRunShell:
     def test_run_shell_success(self):
-        success, output = run_shell("echo hello")
+        success, output = run_shell("python -c \"print('hello')\"")
         assert success is True
         assert "hello" in output
 
     def test_run_shell_failure(self):
-        success, output = run_shell("exit 1")
+        success, output = run_shell("python -c \"import sys; sys.exit(1)\"")
         assert success is False
 
     def test_run_shell_timeout(self):
-        success, output = run_shell("ping -n 10 127.0.0.1", timeout=1)
+        success, output = run_shell("python -c \"import time; time.sleep(10)\"", timeout=1)
         assert success is False
         assert "timed out" in output
 
     def test_run_shell_cwd(self, tmp_path):
         (tmp_path / "test.txt").write_text("found", encoding="utf-8")
-        success, output = run_shell("type test.txt", cwd=tmp_path)
+        success, output = run_shell(
+            "python -c \"print(open('test.txt').read().strip())\"",
+            cwd=tmp_path,
+        )
         assert success is True
         assert "found" in output
 

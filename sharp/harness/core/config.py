@@ -119,6 +119,7 @@ class ExecutionConfig(BaseModel):
     loop_strategy: LoopStrategy = LoopStrategy.REACT
     max_iterations: int = 10
     timeout: float = 120.0
+    loop_policy: str = "auto"  # "auto", "always_react", "never_react"
 
 
 class MCPServerConfig(BaseModel):
@@ -146,6 +147,33 @@ class MCPConfig(BaseModel):
     tool_risk_overrides: dict[str, str] = Field(default_factory=dict)  # tool_name -> risk_level
 
 
+class DashboardConfig(BaseModel):
+    """Dashboard server configuration."""
+
+    api_key: str | None = Field(
+        default=None,
+        description="API key for X-API-Key header auth. Read from SHARP_API_KEY env var.",
+    )
+    auth_required: bool = Field(
+        default=True,
+        description="If True, require valid API key on all /api/* routes.",
+    )
+    dev_mode: bool = Field(
+        default=False,
+        description="If True, skip all auth checks (local development only).",
+    )
+    cors_origins: list[str] = Field(
+        default_factory=lambda: ["http://localhost:3000", "http://localhost:8080"],
+        description="Allowed CORS origins.",
+    )
+    rate_limit_enabled: bool = Field(default=True, description="Enable rate limiting.")
+    rate_limit_rpm: int = Field(default=60, description="Requests per minute for general endpoints.")
+    rate_limit_expensive_rpm: int = Field(
+        default=10,
+        description="Requests per minute for expensive endpoints (engine/run, coding/session).",
+    )
+
+
 class HarnessConfig(BaseModel):
     """Top-level harness configuration."""
 
@@ -159,6 +187,7 @@ class HarnessConfig(BaseModel):
     observability: ObservabilityConfig = Field(default_factory=ObservabilityConfig)
     execution: ExecutionConfig = Field(default_factory=ExecutionConfig)
     mcp: MCPConfig = Field(default_factory=MCPConfig)
+    dashboard: DashboardConfig = Field(default_factory=DashboardConfig)
 
     @classmethod
     def from_yaml(cls, path: str | Path) -> HarnessConfig:
@@ -222,4 +251,44 @@ class HarnessConfig(BaseModel):
                 llm_judge_enabled=False,  # Local models can't be judges
             ),
             mcp=MCPConfig(enabled=False),  # Disable MCP auto-connect for local
+        )
+
+    @classmethod
+    def github_models(
+        cls,
+        token: str | None = None,
+        model: str = "gpt-4o-mini",
+        **kwargs: Any,
+    ) -> HarnessConfig:
+        """Create config for GitHub Models API.
+
+        Args:
+            token: GitHub PAT with models:read scope. Falls back to GITHUB_TOKEN env var.
+            model: Model name (e.g., "gpt-4o-mini", "gpt-4o", "o3-mini")
+            **kwargs: Additional LLMConfig overrides
+        """
+        import os
+
+        api_key = token or os.environ.get("GITHUB_TOKEN", "")
+        if not api_key:
+            raise ValueError(
+                "GitHub Models API requires a PAT token. "
+                "Pass token= or set GITHUB_TOKEN env var."
+            )
+
+        return cls(
+            llm=LLMConfig(
+                provider="openai",
+                model=f"openai/{model}" if "/" not in model else model,
+                api_base="https://models.inference.ai.azure.com",
+                api_key=api_key,
+                temperature=kwargs.get("temperature", 0.7),
+                max_tokens=kwargs.get("max_tokens", 2048),
+                timeout=kwargs.get("timeout", 60.0),
+            ),
+            validation=ValidationConfig(
+                enabled=kwargs.get("validation_enabled", True),
+                llm_judge_enabled=False,  # Save tokens: skip LLM judge
+            ),
+            mcp=MCPConfig(enabled=False),
         )

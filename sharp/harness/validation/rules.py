@@ -83,8 +83,8 @@ class RuleBasedValidator:
         for rule in self._rules:
             try:
                 if not rule.check(response):
-                    all_passed = False
                     if rule.severity == "error":
+                        all_passed = False
                         issues.append(f"[ERROR] {rule.name}: {rule.message}")
                     else:
                         suggestions.append(f"[WARN] {rule.name}: {rule.message}")

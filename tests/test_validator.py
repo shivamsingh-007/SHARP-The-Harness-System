@@ -72,5 +72,6 @@ class TestResponseValidator:
             "A valid response.",
             "Question",
         )
-        # Should still pass because rules pass and judge failure is caught
-        assert result.passed is True
+        # Judge failure now fails closed (HIGH-2 fix)
+        assert result.passed is False
+        assert "LLM judge error" in result.issues[0]

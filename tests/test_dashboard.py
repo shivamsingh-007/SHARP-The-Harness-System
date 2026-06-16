@@ -266,7 +266,18 @@ class TestAPIConfig:
 
 class TestDashboardIntegration:
     def test_full_pipeline_updates_dashboard(self, client):
-        run_resp = client.post("/api/engine/run", json={"request": "What is 2+2?"})
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_provider = MagicMock()
+        mock_provider.complete = AsyncMock(return_value=MagicMock(
+            content="The answer is 4.",
+            tool_calls=[],
+            tokens_used=15,
+            cost_usd=0.001,
+        ))
+
+        with patch("sharp.harness.core.engine.LLMProvider", return_value=mock_provider):
+            run_resp = client.post("/api/engine/run", json={"request": "What is 2+2?"})
         assert run_resp.status_code == 200
 
         health = client.get("/api/health").json()
@@ -279,20 +290,44 @@ class TestDashboardIntegration:
         assert len(traces) >= 1
 
     def test_multiple_runs_accumulate(self, client):
-        client.post("/api/engine/run", json={"request": "test1"})
-        client.post("/api/engine/run", json={"request": "test2"})
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_provider = MagicMock()
+        mock_provider.complete = AsyncMock(return_value=MagicMock(
+            content="OK", tool_calls=[], tokens_used=15, cost_usd=0.001,
+        ))
+
+        with patch("sharp.harness.core.engine.LLMProvider", return_value=mock_provider):
+            client.post("/api/engine/run", json={"request": "test1"})
+            client.post("/api/engine/run", json={"request": "test2"})
 
         metrics = client.get("/api/metrics/aggregate").json()
         assert metrics["total_traces"] >= 2
 
     def test_safety_reflects_usage(self, client):
-        client.post("/api/engine/run", json={"request": "test"})
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_provider = MagicMock()
+        mock_provider.complete = AsyncMock(return_value=MagicMock(
+            content="OK", tool_calls=[], tokens_used=15, cost_usd=0.001,
+        ))
+
+        with patch("sharp.harness.core.engine.LLMProvider", return_value=mock_provider):
+            client.post("/api/engine/run", json={"request": "test"})
 
         safety = client.get("/api/safety").json()
         assert safety["budget"]["total_tokens"] >= 0
 
     def test_connections_after_run(self, client):
-        client.post("/api/engine/run", json={"request": "test"})
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        mock_provider = MagicMock()
+        mock_provider.complete = AsyncMock(return_value=MagicMock(
+            content="OK", tool_calls=[], tokens_used=15, cost_usd=0.001,
+        ))
+
+        with patch("sharp.harness.core.engine.LLMProvider", return_value=mock_provider):
+            client.post("/api/engine/run", json={"request": "test"})
 
         conns = client.get("/api/connections").json()
         assert len(conns["connections"]) >= 3

@@ -11,9 +11,10 @@ class TestHumanApprovalGate:
         return HumanApprovalGate()
 
     @pytest.mark.asyncio
-    async def test_auto_approve_no_callback(self, gate):
+    async def test_auto_reject_no_callback(self, gate):
+        """No callback configured → reject by default (safe default)."""
         result = await gate.request_approval("tool1")
-        assert result is True
+        assert result is False
 
     @pytest.mark.asyncio
     async def test_approve_with_callback(self, gate):

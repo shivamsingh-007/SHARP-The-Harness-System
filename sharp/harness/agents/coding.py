@@ -8,6 +8,7 @@ Session lifecycle:
 
 from __future__ import annotations
 
+import shlex
 import subprocess
 import time
 from dataclasses import dataclass, field
@@ -81,21 +82,55 @@ class DPEVRResult:
     notes: str = ""
 
 
-def run_shell(command: str, cwd: str | Path = ".", timeout: int = 30) -> tuple[bool, str]:
-    """Run a shell command and return (success, output).
+ALLOWED_COMMANDS = frozenset({
+    "git", "python", "python3", "pip", "pip3",
+    "pytest", "ls", "cat", "grep", "find", "bash",
+})
+
+
+def run_shell(
+    command: str,
+    cwd: str | Path = ".",
+    timeout: int = 30,
+    project_root: str | Path | None = None,
+) -> tuple[bool, str]:
+    """Run a command safely with allowlist enforcement.
+
+    Uses shell=False with argument list. No shell metacharacters are interpreted.
 
     Args:
-        command: Shell command to execute.
+        command: Command string (will be split via shlex).
         cwd: Working directory.
         timeout: Timeout in seconds.
+        project_root: If set, cwd must resolve within this directory.
 
     Returns:
         Tuple of (success: bool, output: str).
     """
+    if not command.strip():
+        return False, "Empty command"
+
+    try:
+        parts = shlex.split(command)
+    except ValueError as e:
+        return False, f"Invalid command syntax: {e}"
+
+    if not parts:
+        return False, "Empty command"
+
+    cmd_name = Path(parts[0]).name
+    if cmd_name not in ALLOWED_COMMANDS:
+        return False, f"Command not allowed: {cmd_name}. Allowed: {sorted(ALLOWED_COMMANDS)}"
+
+    resolved_cwd = Path(cwd).resolve()
+    if project_root:
+        root = Path(project_root).resolve()
+        if not resolved_cwd.is_relative_to(root):
+            return False, f"CWD outside project root: {cwd}"
+
     try:
         result = subprocess.run(
-            command,
-            shell=True,
+            parts,
             cwd=str(cwd),
             capture_output=True,
             text=True,
@@ -214,6 +249,7 @@ class CodingAgent:
         success, output = run_shell(
             "git log --oneline -20",
             cwd=self.project_root,
+            project_root=self.project_root,
         )
         if not success:
             return "No git history found."
@@ -230,6 +266,7 @@ class CodingAgent:
             f"bash {init_script}",
             cwd=self.project_root,
             timeout=60,
+            project_root=self.project_root,
         )
         if not success:
             logger.warning(f"init.sh failed: {output[:200]}")
@@ -240,6 +277,7 @@ class CodingAgent:
         success, output = run_shell(
             'python -c "from sharp import HarnessEngine; e = HarnessEngine(); print(\'OK\')"',
             cwd=self.project_root,
+            project_root=self.project_root,
         )
         return success
 
@@ -298,7 +336,7 @@ class CodingAgent:
 
             # ── EXECUTE ─────────────────────────────────────────────
             exec_start = time.time()
-            exec_output = self._execute_feature(feature, prompt_context)
+            exec_output = await self._execute_feature(feature, prompt_context)
             exec_duration = (time.time() - exec_start) * 1000
             exec_step = DPEVRStep(
                 phase="execute",
@@ -428,13 +466,12 @@ class CodingAgent:
 
         return "\n".join(parts)
 
-    def _execute_feature(self, feature: Feature, context: str) -> str:
+    async def _execute_feature(self, feature: Feature, context: str) -> str:
         """Execute the feature by calling the real LLM engine.
 
         Uses HarnessEngine to generate code/implementation for the feature.
         Falls back to shell test if no engine config is provided.
         """
-        import asyncio
 
         from sharp.harness.core.config import HarnessConfig
         from sharp.harness.core.engine import HarnessEngine
@@ -458,9 +495,7 @@ class CodingAgent:
             try:
                 engine_config = HarnessConfig(**self.config.engine_config)
                 engine = HarnessEngine(engine_config)
-                result = asyncio.get_event_loop().run_until_complete(
-                    engine.run(prompt)
-                )
+                result = await engine.run(prompt)
                 if result.success and result.output:
                     logger.info(f"LLM generated implementation for {feature.id}")
                     return result.output
@@ -471,7 +506,7 @@ class CodingAgent:
         # Fallback: run the feature's test command
         test_cmd = self._get_test_command(feature)
         if test_cmd:
-            success, output = run_shell(test_cmd, cwd=self.project_root, timeout=30)
+            success, output = run_shell(test_cmd, cwd=self.project_root, timeout=30, project_root=self.project_root)
             return output
 
         return f"Feature {feature.id} implementation step completed"
@@ -485,13 +520,14 @@ class CodingAgent:
         # Run the test command for this feature
         test_cmd = self._get_test_command(feature)
         if test_cmd:
-            success, output = run_shell(test_cmd, cwd=self.project_root, timeout=30)
+            success, output = run_shell(test_cmd, cwd=self.project_root, timeout=30, project_root=self.project_root)
             return success, output
 
         # No test command — check if basic imports work
         success, output = run_shell(
             'python -c "from sharp import HarnessEngine; print(\'OK\')"',
             cwd=self.project_root,
+            project_root=self.project_root,
         )
         return success, output
 
@@ -553,19 +589,23 @@ class CodingAgent:
     def _git_commit(self, feature: Feature) -> bool:
         """Git add and commit with a message about the feature."""
         # Stage all changes
-        ok1, _ = run_shell("git add .", cwd=self.project_root)
+        ok1, _ = run_shell("git add .", cwd=self.project_root, project_root=self.project_root)
         if not ok1:
             return False
 
-        # Commit
+        # Commit using subprocess list (no shell injection)
         msg = f"feat({feature.category}): {feature.description}"
-        # Escape quotes in message
-        msg = msg.replace('"', '\\"')
-        ok2, _ = run_shell(
-            f'git commit -m "{msg}"',
-            cwd=self.project_root,
-        )
-        return ok2
+        try:
+            result = subprocess.run(
+                ["git", "commit", "-m", msg],
+                cwd=str(self.project_root),
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
+            return result.returncode == 0
+        except Exception:
+            return False
 
     def _update_progress(
         self,

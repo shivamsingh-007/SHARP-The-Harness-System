@@ -1,4 +1,4 @@
-"""Execution loop - ReAct/CoT/ToT execution strategies."""
+"""Execution loop — ReAct strategy with CoT/ToT stubs."""
 
 from __future__ import annotations
 
@@ -60,13 +60,30 @@ class LoopState:
     had_tool_calls_this_iteration: bool = False
 
 
+@dataclass
+class LoopResult:
+    """Structured result from the execution loop.
+
+    Contains the final output plus usage metadata accumulated
+    across all provider calls in the loop.
+    """
+
+    output: str
+    iterations: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    total_cost_usd: float = 0.0
+    tool_calls_count: int = 0
+    provider_calls: int = 0
+
+
 class ExecutionLoop:
     """Manages the LLM execution loop.
 
-    Supports multiple strategies:
-    - ReAct: Think -> Act -> Observe cycle
-    - CoT: Chain of Thought (linear reasoning)
-    - ToT: Tree of Thoughts (parallel exploration)
+    Supports the ReAct strategy (Think -> Act -> Observe cycle).
+    CoT and ToT are defined in LoopStrategy enum but not yet implemented;
+    selecting them raises NotImplementedError.
     """
 
     def __init__(self, config: ExecutionConfig, tool_registry: ToolRegistry) -> None:
@@ -246,8 +263,8 @@ class ExecutionLoop:
         user_request: str,
         tools: list[ToolDefinition] | None = None,
         system_prompt: str = "",
-    ) -> str:
-        """Execute the ReAct/CoT/ToT loop.
+    ) -> LoopResult:
+        """Execute the ReAct loop.
 
         Args:
             provider: LLMProvider instance for making LLM calls.
@@ -256,11 +273,26 @@ class ExecutionLoop:
             system_prompt: Base system prompt.
 
         Returns:
-            The final answer from the loop.
+            LoopResult with output and usage metadata.
+
+        Raises:
+            NotImplementedError: If strategy is COT or TOT (not yet implemented).
         """
         self.reset()
         tools = tools or []
         strategy = self.config.loop_strategy
+
+        if strategy in (LoopStrategy.COT, LoopStrategy.TOT):
+            raise NotImplementedError(
+                f"{strategy.value.upper()} strategy is not yet implemented. "
+                f"Use LoopStrategy.REACT instead."
+            )
+
+        # Accumulate usage metadata across all provider calls
+        total_prompt_tokens = 0
+        total_completion_tokens = 0
+        total_cost = 0.0
+        provider_call_count = 0
 
         # Build the system prompt with tool descriptions
         tools_desc = self._build_tools_description(tools)
@@ -294,6 +326,11 @@ class ExecutionLoop:
                 )
                 content = response.content
                 native_tool_calls = response.tool_calls if isinstance(response.tool_calls, list) else []
+                # Accumulate usage metadata from this provider call
+                provider_call_count += 1
+                total_prompt_tokens += int(getattr(response, "tokens_prompt", 0) or 0)
+                total_completion_tokens += int(getattr(response, "tokens_completion", 0) or 0)
+                total_cost += float(getattr(response, "cost_usd", 0.0) or 0.0)
             except Exception as e:
                 logger.error(f"LLM call failed in loop iteration {self._state.iteration}: {e}")
                 self.record_observation(f"Error: {e}")
@@ -387,7 +424,6 @@ class ExecutionLoop:
                     observation = tool_result.output if tool_result.success else f"Error: {tool_result.error}"
                     self.record_observation(observation)
 
-                    messages.append({"role": "assistant", "content": content})
                     messages.append({"role": "user", "content": f"Observation: {observation}"})
 
                     logger.info(
@@ -408,8 +444,25 @@ class ExecutionLoop:
 
         if not self._state.done:
             logger.debug(f"Loop ended without final answer after {self._state.iteration} iterations")
-            if self._state.observations:
-                return self._state.observations[-1]
-            return "Loop completed without a final answer."
+            output = self._state.observations[-1] if self._state.observations else "Loop completed without a final answer."
+            return LoopResult(
+                output=output,
+                iterations=self._state.iteration,
+                prompt_tokens=total_prompt_tokens,
+                completion_tokens=total_completion_tokens,
+                total_tokens=total_prompt_tokens + total_completion_tokens,
+                total_cost_usd=total_cost,
+                tool_calls_count=len(self._state.tool_calls),
+                provider_calls=provider_call_count,
+            )
 
-        return self._state.final_answer
+        return LoopResult(
+            output=self._state.final_answer,
+            iterations=self._state.iteration,
+            prompt_tokens=total_prompt_tokens,
+            completion_tokens=total_completion_tokens,
+            total_tokens=total_prompt_tokens + total_completion_tokens,
+            total_cost_usd=total_cost,
+            tool_calls_count=len(self._state.tool_calls),
+            provider_calls=provider_call_count,
+        )

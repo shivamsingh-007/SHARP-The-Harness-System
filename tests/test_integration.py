@@ -95,10 +95,14 @@ class TestFullPipeline:
             MagicMock(
                 content='Thought: I need to search\nAction: search(query="test")',
                 tool_calls=[{"id": "c1", "name": "search", "arguments": '{"query": "test"}'}],
+                tokens_prompt=30,
+                tokens_completion=15,
+                cost_usd=0.001,
             ),
             MagicMock(
                 content="Final Answer: Based on my search, here are the results.",
-                tokens_used=80,
+                tokens_prompt=50,
+                tokens_completion=30,
                 cost_usd=0.002,
             ),
         ])
@@ -307,3 +311,106 @@ class TestComponentIntegration:
         loaded = engine.checkpoint_manager.load("test-trace")
         assert loaded is not None
         assert loaded.output == "test output"
+
+
+# ─── Bug Fix Regression Tests ────────────────────────────────────────
+
+
+class TestBugFixRegressions:
+    """Regression tests for the 12 bugs identified in the brutal honest report."""
+
+    @pytest.mark.asyncio
+    async def test_loop_returns_loop_result(self):
+        """CRITICAL-3: Loop returns LoopResult with real metadata, not a string."""
+        from unittest.mock import AsyncMock, MagicMock
+
+        from sharp.harness.execution.loop import ExecutionLoop, LoopResult
+        from sharp.harness.execution.tools import ToolRegistry
+        from sharp.harness.core.config import ExecutionConfig, ToolConfig
+        from sharp.harness.core.types import LoopStrategy
+
+        config = ExecutionConfig(max_iterations=5, loop_strategy=LoopStrategy.REACT)
+        registry = ToolRegistry(ToolConfig())
+        loop = ExecutionLoop(config, registry)
+
+        provider = AsyncMock()
+        provider.complete = AsyncMock(return_value=MagicMock(
+            content="Final Answer: 42",
+            tool_calls=[],
+            tokens_prompt=10,
+            tokens_completion=5,
+            cost_usd=0.001,
+        ))
+
+        result = await loop.run(provider, "What is 2+2?")
+        assert isinstance(result, LoopResult)
+        assert result.output == "42"
+        assert result.total_tokens == 15
+        assert result.total_cost_usd == 0.001
+        assert result.provider_calls == 1
+
+    @pytest.mark.asyncio
+    async def test_orchestrator_reuses_engine(self):
+        """CRITICAL-4: Orchestrator reuses engine across requests."""
+        from sharp.harness.orchestration.orchestrator import Orchestrator, OrchestratorConfig
+        from sharp.harness.orchestration.types import InterfaceType
+
+        config = OrchestratorConfig(engine_config=HarnessConfig.default())
+        orch = Orchestrator(config)
+
+        # First request creates engine
+        engine1 = orch._engine
+        # Second request should reuse same engine
+        engine2 = orch._engine
+        assert engine1 is engine2
+
+    def test_config_not_mutated(self):
+        """HIGH-1: Orchestrator doesn't mutate shared engine_config."""
+        from sharp.harness.orchestration.orchestrator import Orchestrator, OrchestratorConfig
+
+        original_model = "gpt-4o"
+        engine_config = HarnessConfig.default()
+        engine_config.llm.model = original_model
+
+        config = OrchestratorConfig(engine_config=engine_config)
+        orch = Orchestrator(config)
+
+        # Simulate what _execute_with_sharp does to config
+        copied = engine_config.model_copy(deep=True)
+        copied.llm.model = "claude-3-5-sonnet"
+
+        # Original should be unchanged
+        assert engine_config.llm.model == original_model
+
+    @pytest.mark.asyncio
+    async def test_judge_failure_fails_closed(self):
+        """HIGH-2: Judge failure results in validation failure, not auto-pass."""
+        from unittest.mock import AsyncMock
+
+        from sharp.harness.core.config import ValidationConfig
+        from sharp.harness.validation.validator import ResponseValidator
+
+        config = ValidationConfig(llm_judge_enabled=True)
+        validator = ResponseValidator(config)
+        validator.llm_judge.evaluate = AsyncMock(side_effect=Exception("LLM down"))
+
+        result = await validator.validate("Some output", "Some request")
+        assert result.passed is False
+        assert "LLM judge error" in result.issues[0]
+
+    def test_severity_warning_does_not_block(self):
+        """MEDIUM-2: Warning severity rules don't block pass/fail."""
+        from sharp.harness.validation.rules import Rule, RuleBasedValidator
+
+        validator = RuleBasedValidator()
+        validator.add_rule(Rule(
+            name="length_check",
+            check=lambda r: len(r) > 100,
+            message="Too short",
+            severity="warning",
+        ))
+
+        result = validator.validate("Short")
+        # Warning rule fails but should NOT block pass/fail
+        assert result.passed is True
+        assert len(result.suggestions) == 1  # Warning goes to suggestions

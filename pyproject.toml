@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "sharp"
-version = "0.1.0"
+version = "0.2.0"
 description = "SHARP - System for Harnessing Augmented Reasoning and Transforming Heuristics. A production-grade harness for LLM agents with context engineering, prompt engineering, validation, and MCP integration."
 readme = "README.md"
 license = "MIT"
@@ -27,8 +27,6 @@ dependencies = [
     "litellm>=1.40.0",
     "typer>=0.12.0",
     "rich>=13.0",
-    "aiofiles>=24.0",
-    "httpx>=0.27.0",
     "mcp>=1.20,<2.0",
     "fastapi>=0.110.0",
     "uvicorn[standard]>=0.27.0",
@@ -77,5 +75,18 @@ warn_unused_configs = true
 asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
-    "llm_integration: marks tests that require a running Ollama instance",
+    "llm_integration: marks tests that require a live LLM provider",
+]
+
+[tool.coverage.run]
+source = ["sharp"]
+omit = ["tests/*", "sharp/harness/benchmarks/*"]
+
+[tool.coverage.report]
+fail_under = 70
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "if TYPE_CHECKING:",
 ]

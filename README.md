@@ -6,15 +6,18 @@
 
 A general-purpose orchestration framework for LLM tools and agents with context engineering, prompt engineering, validation, and MCP integration.
 
+**A proof of concept with real code.** Not production-ready. See [PRODUCT_CONTRACT.md](PRODUCT_CONTRACT.md) for what this project promises and what it doesn't.
+
 **Security:** Designed for localhost development. Not production-hardened — CORS allows all origins, subprocess calls use `shell=True`, no auth on API endpoints.
 
 ---
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-00FF00?style=for-the-badge)](https://opensource.org/licenses/MIT)
-[![Tests: 472/472](https://img.shields.io/badge/Tests-472%20passed-44CC11?style=for-the-badge&logo=pytest&logoColor=white)](#-testing)
+[![Version: 0.2.0](https://img.shields.io/badge/Version-0.2%20Dev%20Preview-FF6B35?style=for-the-badge)](#-testing)
+[![Tests: 493/493](https://img.shields.io/badge/Tests-493%20passed-44CC11?style=for-the-badge&logo=pytest&logoColor=white)](#-testing)
 [![MCP Compatible](https://img.shields.io/badge/MCP-Compatible-FF6B35?style=for-the-badge&logo=modelcontextprotocol&logoColor=white)](#-mcp-integration)
-[![Code: 8,648 LOC](https://img.shields.io/badge/Engine-8,648%20lines-8B5CF6?style=for-the-badge)](#-architecture)
+[![Code: 10,871 LOC](https://img.shields.io/badge/Engine-10,871%20lines-8B5CF6?style=for-the-badge)](#-architecture)
 
 <br />
 
@@ -109,18 +112,22 @@ sharp/harness/
 
 | Zone | Files | Lines | Purpose |
 |:---|:---:|:---:|:---|
-| `core` | 5 | 839 | Engine orchestrator, config, shared types |
-| `mcp` | 5 | 936 | MCP client, server registry, tool/resource/prompt bridge |
+| `core` | 5 | 1,318 | Engine orchestrator, config, shared types |
+| `orchestration` | 7 | 2,022 | Intent router, adapters, orchestrator, aggregator |
+| `execution` | 6 | 1,084 | Multi-provider LLM, tool governance, ReAct loop, sub-agents |
+| `mcp` | 6 | 1,101 | MCP client, server registry, tool/resource/prompt bridge |
+| `agents` | 3 | 1,067 | Coding agent (DPEVR), initializer |
+| `dashboard` | 4 | 901 | FastAPI server, bridge, rate limiting |
 | `context` | 6 | 637 | Context curator, memory manager, document retrieval, compression |
-| `execution` | 5 | 771 | Multi-provider LLM, tool governance, ReAct loop, sub-agents |
-| `validation` | 5 | 432 | LLM judge, rule engine, retry with feedback mutation |
+| `validation` | 5 | 451 | LLM judge, rule engine, retry with feedback mutation |
 | `prompt` | 4 | 329 | Prompt composer, templates, token budget allocator |
 | `safety` | 5 | 315 | Circuit breaker, budget limits, permissions, human-in-the-loop |
+| `artifacts` | 3 | 266 | Feature list, progress tracking, artifact manager |
 | `observability` | 5 | 289 | Metrics, OpenTelemetry tracing, structured logging |
 | `state` | 4 | 241 | Checkpointing, session management, file/Redis persistence |
 | `benchmarks` | 2 | 247 | Benchmark runner with 5 test types |
 | `utils` | 4 | 146 | Token counting, async helpers, formatting |
-| **Total** | **52** | **8,648** | |
+| **Total** | **73** | **10,871** | |
 
 ---
 
@@ -375,9 +382,9 @@ pytest tests/test_safety/ -v
 pytest tests/ --cov=sharp --cov-report=term-missing
 ```
 
-**Note:** 472 unit tests use mocked LLM responses and run without any external dependencies.
-8 additional LLM integration tests (`test_llm_integration.py`) require a running Ollama instance
-with `llama3.1:8b` pulled. CI runs only the mocked tests by default.
+**Note:** 493 unit tests use mocked LLM responses and verify **plumbing, not intelligence** — they prove components connect and control flow works correctly.
+11 LLM integration tests (`test_llm_integration.py`) use GitHub Models API with `gpt-4o-mini` and verify **shape and coarse correctness** of real LLM output.
+CI runs only the mocked tests by default.
 
 ```
 tests/test_engine.py         13/13  ✓  Core Engine
@@ -415,7 +422,7 @@ tests/test_mcp_sharp_tools.py 14/14  ✓  MCP SHARP Tools
 tests/test_dashboard.py      36/36  ✓  Dashboard
 tests/test_orchestration.py  73/73  ✓  Orchestration Layer
 ─────────────────────────────────────
-Total:                       472/472  ✓  All Passing
+Total:                       493/493  ✓  All Passing
 ```
 
 ---
@@ -423,7 +430,7 @@ Total:                       472/472  ✓  All Passing
 ## 📦 Project Structure
 
 ```
-sharp/                          # Python package (52 modules, 8,648 lines)
+sharp/                          # Python package (73 modules, 10,871 lines)
 ├── __init__.py                 # Public API: HarnessEngine, HarnessConfig, errors
 ├── __main__.py                 # python -m sharp
 ├── cli.py                      # CLI: sharp run, sharp health, sharp config-show
@@ -440,7 +447,7 @@ sharp/                          # Python package (52 modules, 8,648 lines)
     ├── benchmarks/             # Benchmark runner, 5 test types
     └── utils/                  # Tokens, async, format
 
-tests/                          # Test suite (29 files, 2,805 lines)
+tests/                          # Test suite (39 files, 6,497 lines)
 examples/                       # Usage examples
 harness.yaml                    # Default config
 ```

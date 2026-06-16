@@ -125,7 +125,7 @@ class TestLLMProviderCostEstimation:
         config = LLMConfig()
         provider = LLMProvider(config)
         cost = provider._estimate_cost("unknown-model", 1000, 500)
-        assert cost > 0
+        assert cost == 0.0  # Unknown/local models have no cost
 
 
 class TestLLMProviderToolConversion:

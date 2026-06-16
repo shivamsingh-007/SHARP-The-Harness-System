@@ -15,7 +15,7 @@ from sharp.harness.orchestration.aggregator import ContextAggregator
 from sharp.harness.orchestration.audit import AuditLogger
 from sharp.harness.orchestration.types import InterfaceType, TaskType, ModelType
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 __all__ = [
     "HarnessEngine",
     "HarnessConfig",

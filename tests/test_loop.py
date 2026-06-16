@@ -1,8 +1,8 @@
-"""Tests for execution/loop.py - ReAct/CoT/ToT execution loop."""
+"""Tests for execution/loop.py - ReAct execution loop."""
 
 import pytest
 from unittest.mock import AsyncMock, MagicMock
-from sharp.harness.execution.loop import ExecutionLoop, LoopState
+from sharp.harness.execution.loop import ExecutionLoop, LoopResult, LoopState
 from sharp.harness.core.config import ExecutionConfig
 from sharp.harness.core.types import LoopStrategy, ToolDefinition, RiskLevel
 from sharp.harness.execution.tools import ToolRegistry
@@ -151,10 +151,20 @@ class TestExecutionLoopRun:
         provider.complete = AsyncMock(return_value=MagicMock(
             content="Final Answer: The answer is 42.",
             tool_calls=[],
+            tokens_prompt=10,
+            tokens_completion=5,
+            cost_usd=0.001,
         ))
 
         result = await loop.run(provider, "What is the answer?")
-        assert result == "The answer is 42."
+        assert result.output == "The answer is 42."
+        assert result.iterations == 1
+        assert result.prompt_tokens == 10
+        assert result.completion_tokens == 5
+        assert result.total_tokens == 15
+        assert result.total_cost_usd == 0.001
+        assert result.tool_calls_count == 0
+        assert result.provider_calls == 1
         assert loop.state.done is True
 
     @pytest.mark.asyncio
@@ -178,12 +188,14 @@ class TestExecutionLoopRun:
 
         provider = AsyncMock()
         provider.complete = AsyncMock(side_effect=[
-            MagicMock(content='Thought: I need to search\nAction: search(query="test")', tool_calls=[]),
-            MagicMock(content="Thought: Got results\nFinal Answer: Here are the results.", tool_calls=[]),
+            MagicMock(content='Thought: I need to search\nAction: search(query="test")', tool_calls=[], tokens_prompt=20, tokens_completion=10, cost_usd=0.002),
+            MagicMock(content="Thought: Got results\nFinal Answer: Here are the results.", tool_calls=[], tokens_prompt=30, tokens_completion=15, cost_usd=0.003),
         ])
 
         result = await loop.run(provider, "Search for test")
-        assert "results" in result.lower()
+        assert "results" in result.output.lower()
+        assert result.provider_calls == 2
+        assert result.total_tokens == 75
         assert len(loop.state.tool_calls) == 1
 
     @pytest.mark.asyncio
@@ -198,8 +210,13 @@ class TestExecutionLoopRun:
         provider.complete = AsyncMock(return_value=MagicMock(
             content="Thought: Still thinking...",
             tool_calls=[],
+            tokens_prompt=10,
+            tokens_completion=5,
+            cost_usd=0.001,
         ))
 
         result = await loop.run(provider, "Think hard")
         assert loop.state.iteration == 2
         assert loop.state.done is False
+        assert result.iterations == 2
+        assert result.output == "Loop completed without a final answer."

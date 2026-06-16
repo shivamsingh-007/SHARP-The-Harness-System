@@ -59,9 +59,10 @@ class ResponseValidator:
             except Exception as e:
                 logger.warning(f"LLM judge failed: {e}")
                 judge_result = ValidationResult(
-                    passed=True,
-                    score=0.7,
+                    passed=False,
+                    score=0.0,
                     feedback=f"Judge failed: {e}",
+                    issues=[f"LLM judge error: {e}"],
                 )
 
             # Combine results

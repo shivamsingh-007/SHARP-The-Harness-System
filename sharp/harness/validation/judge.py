@@ -94,9 +94,20 @@ class LLMJudge:
 
             # Extract JSON from response
             content = llm_response.content
-            json_match = re.search(r'\{[^{}]*\}', content, re.DOTALL)
-            if json_match:
-                result = json.loads(json_match.group())
+            # Handle nested JSON by finding the outermost braces
+            brace_start = content.find('{')
+            if brace_start != -1:
+                depth = 0
+                for i in range(brace_start, len(content)):
+                    if content[i] == '{':
+                        depth += 1
+                    elif content[i] == '}':
+                        depth -= 1
+                        if depth == 0:
+                            result = json.loads(content[brace_start:i+1])
+                            break
+                else:
+                    result = json.loads(content)
             else:
                 result = json.loads(content)
 
@@ -110,9 +121,9 @@ class LLMJudge:
 
         except Exception as e:
             logger.error(f"LLM judge evaluation failed: {e}")
-            # Fallback: pass if judge fails
             return ValidationResult(
-                passed=True,
-                score=0.7,
-                feedback=f"Judge evaluation failed: {e}. Assuming pass.",
+                passed=False,
+                score=0.0,
+                feedback=f"Judge evaluation failed: {e}.",
+                issues=[f"LLM judge error: {e}"],
             )

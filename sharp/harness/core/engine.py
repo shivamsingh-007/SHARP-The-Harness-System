@@ -5,6 +5,7 @@ from __future__ import annotations
 import inspect
 import time
 import uuid
+from pathlib import Path
 from typing import Any
 
 from sharp.harness.core.config import HarnessConfig
@@ -16,7 +17,7 @@ from sharp.harness.core.errors import (
 from sharp.harness.core.types import HarnessResult, ToolDefinition, ToolResult
 from sharp.harness.context.curator import ContextCurator
 from sharp.harness.prompt.composer import PromptComposer
-from sharp.harness.execution.loop import ExecutionLoop, LoopState
+from sharp.harness.execution.loop import ExecutionLoop, LoopResult, LoopState
 from sharp.harness.execution.providers import LLMProvider
 from sharp.harness.execution.tools import ToolRegistry
 from sharp.harness.execution.subagents import SubAgentManager, SubAgentDefinition
@@ -60,6 +61,7 @@ class HarnessEngine:
     def __init__(self, config: HarnessConfig | None = None) -> None:
         self.config = config or HarnessConfig.default()
         self._trace_id = str(uuid.uuid4())
+        self._project_root: Path = Path.cwd()
 
         # Wire safety.blocked_commands → tool.blocked_tools
         if self.config.safety.blocked_commands and not self.config.tools.blocked_tools:
@@ -95,6 +97,23 @@ class HarnessEngine:
 
         # Register built-in tools
         self._register_builtin_tools()
+
+    def _validate_path(self, path: str, must_exist: bool = False) -> Path | str:
+        """Validate a path is within the project root.
+
+        Args:
+            path: Path string to validate.
+            must_exist: If True, also check the path exists.
+
+        Returns:
+            Resolved Path if valid, or error string if invalid.
+        """
+        p = Path(path).resolve()
+        if not p.is_relative_to(self._project_root.resolve()):
+            return f"Error: Path '{path}' is outside project root"
+        if must_exist and not p.exists():
+            return f"Error: Path '{path}' not found"
+        return p
 
     def _register_default_subagents(self) -> None:
         """Register default sub-agent definitions."""
@@ -166,10 +185,9 @@ class HarnessEngine:
             Args:
                 path: Path to the file to read
             """
-            from pathlib import Path
-            p = Path(path)
-            if not p.exists():
-                return f"Error: File '{path}' not found"
+            p = self._validate_path(path, must_exist=True)
+            if isinstance(p, str):
+                return p
             if not p.is_file():
                 return f"Error: '{path}' is not a file"
             try:
@@ -186,10 +204,9 @@ class HarnessEngine:
             Args:
                 path: Directory path to list (default: current directory)
             """
-            from pathlib import Path
-            p = Path(path)
-            if not p.exists():
-                return f"Error: Directory '{path}' not found"
+            p = self._validate_path(path, must_exist=True)
+            if isinstance(p, str):
+                return p
             if not p.is_dir():
                 return f"Error: '{path}' is not a directory"
             entries = []
@@ -208,10 +225,9 @@ class HarnessEngine:
                 pattern: Glob pattern (e.g., "*.py", "**/*.js")
                 path: Directory to search in (default: current directory)
             """
-            from pathlib import Path
-            p = Path(path)
-            if not p.exists():
-                return f"Error: Path '{path}' not found"
+            p = self._validate_path(path, must_exist=True)
+            if isinstance(p, str):
+                return p
             matches = list(p.glob(pattern))
             if not matches:
                 return f"No files found matching '{pattern}' in '{path}'"
@@ -227,10 +243,9 @@ class HarnessEngine:
                 include: File pattern to include (default: all files)
             """
             import re
-            from pathlib import Path
-            p = Path(path)
-            if not p.exists():
-                return f"Error: Path '{path}' not found"
+            p = self._validate_path(path, must_exist=True)
+            if isinstance(p, str):
+                return p
             compiled = re.compile(pattern, re.IGNORECASE)
             results = []
             files_searched = 0
@@ -365,7 +380,9 @@ class HarnessEngine:
                 "use the", "call the", "run the", "execute the",
                 "list the files", "read the file", "write to",
                 "search for", "grep", "what time", "current time",
-                "what date", "current date",
+                "what date", "current date", "find the", "open the",
+                "check the", "look at", "show me", "get the",
+                "how many", "count the", "summarize", "list all",
             ]
             has_explicit_tool = any(phrase in prompt_lower for phrase in explicit_tool_phrases)
             if not has_explicit_tool:
@@ -404,9 +421,11 @@ class HarnessEngine:
 
     def load_memory_file(self, path: str) -> None:
         """Load memory from a file (like CLAUDE.md)."""
-        from pathlib import Path
-
-        content = Path(path).read_text(encoding="utf-8")
+        p = self._validate_path(path, must_exist=True)
+        if isinstance(p, str):
+            logger.warning(f"Memory file rejected: {p}")
+            return
+        content = p.read_text(encoding="utf-8")
         self._memory[path] = content
 
     async def connect_mcp_servers(self) -> None:
@@ -657,16 +676,23 @@ class HarnessEngine:
             # Fast path: simple prompts bypass the REACT loop
             is_simple = self._is_simple_prompt(user_request)
             has_tools = bool(self._tools) and self.config.prompt.include_tools_in_prompt
-            use_loop = has_tools and self.config.execution.loop_strategy.value == "react" and not is_simple
+            loop_policy = self.config.execution.loop_policy
+            if loop_policy == "always_react":
+                use_loop = has_tools and self.config.execution.loop_strategy.value == "react"
+            elif loop_policy == "never_react":
+                use_loop = False
+            else:  # auto
+                use_loop = has_tools and self.config.execution.loop_strategy.value == "react" and not is_simple
 
             if use_loop:
                 # Run through the ReAct execution loop
-                output = await self.execution_loop.run(
+                loop_result = await self.execution_loop.run(
                     provider=provider,
                     user_request=augmented_prompt.user_message,
                     tools=self._tools,
                     system_prompt=augmented_prompt.system_prompt,
                 )
+                output = loop_result.output
                 # Preserve loop state for dashboard
                 self._last_loop_state = LoopState(
                     iteration=self.execution_loop.state.iteration,
@@ -676,9 +702,9 @@ class HarnessEngine:
                     done=self.execution_loop.state.done,
                     final_answer=self.execution_loop.state.final_answer,
                 )
-                # Create a synthetic LLMResponse-like object for validation
-                tokens_used = len(output.split()) * 2  # rough estimate
-                cost = 0.0
+                # Use real metadata from loop result
+                tokens_used = loop_result.total_tokens
+                cost = loop_result.total_cost_usd
             else:
                 # Direct LLM call (no tools or non-react strategy or simple prompt)
                 # For simple prompts, use a minimal system prompt without tool references

@@ -55,9 +55,12 @@ class HumanApprovalGate:
                 logger.warning(f"Approval timeout for tool: {tool_name}")
                 return False
 
-        # Default: approve (for non-interactive environments)
-        logger.info(f"Auto-approving tool: {tool_name} (no callback set)")
-        return True
+        # Default: reject (safe default — no silent approval without callback)
+        logger.warning(
+            f"Auto-rejecting tool: {tool_name} — no approval callback configured. "
+            "Set an approval callback or use approval_mode='none' to skip approval gates."
+        )
+        return False
 
     def approve(self, request_id: str) -> None:
         """Approve a pending request."""

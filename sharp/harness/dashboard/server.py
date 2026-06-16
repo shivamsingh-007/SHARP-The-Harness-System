@@ -4,15 +4,18 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import time
 from typing import Any
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from sharp.harness.core.engine import HarnessEngine
-from sharp.harness.core.config import HarnessConfig
+from sharp.harness.core.config import HarnessConfig, DashboardConfig
 from sharp.harness.dashboard.bridge import DashboardBridge
+from sharp.harness.dashboard.rate_limit import RateLimitMiddleware
 from sharp.harness.orchestration.router import IntentRouter, IntentRouterConfig
 from sharp.harness.orchestration.orchestrator import Orchestrator, OrchestratorConfig
 from sharp.harness.observability.logging import get_logger
@@ -34,26 +37,74 @@ def get_engine(name: str = "default") -> HarnessEngine | None:
     return _global_engines.get(name)
 
 
-def create_app(config: HarnessConfig | None = None, engine: HarnessEngine | None = None) -> FastAPI:
+def _get_effective_api_key(dash_config: DashboardConfig) -> str | None:
+    """Resolve API key from config or environment."""
+    return dash_config.api_key or os.environ.get("SHARP_API_KEY")
+
+
+def _build_cors_origins(dash_config: DashboardConfig) -> list[str]:
+    """Resolve CORS origins from config or environment."""
+    env_origins = os.environ.get("SHARP_CORS_ORIGINS")
+    if env_origins:
+        return [o.strip() for o in env_origins.split(",") if o.strip()]
+    return dash_config.cors_origins
+
+
+def create_app(
+    config: HarnessConfig | None = None,
+    engine: HarnessEngine | None = None,
+    dev_mode: bool = False,
+) -> FastAPI:
     """Create and configure the FastAPI dashboard server.
 
     Args:
         config: Harness configuration (used if engine not provided)
         engine: Shared engine instance (for connecting to opencode session)
+        dev_mode: If True, skip all auth checks (local development only).
     """
     app = FastAPI(title="SHARP Dashboard", version="0.1.0")
 
+    # Resolve effective config
+    _app_config = config or HarnessConfig.default()
+    dash_config = _app_config.dashboard
+    if dev_mode:
+        dash_config = dash_config.model_copy(update={"dev_mode": True})
+
+    # CORS
+    cors_origins = _build_cors_origins(dash_config)
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],
-        allow_credentials=True,
-        allow_methods=["*"],
+        allow_origins=cors_origins,
+        allow_credentials=False,
+        allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
 
-    # Use provided engine, global engine, or create new one
+    # Auth middleware
+    api_key = _get_effective_api_key(dash_config)
+
+    @app.middleware("http")
+    async def auth_middleware(request: Request, call_next):
+        """Validate X-API-Key on /api/* routes."""
+        if request.url.path.startswith("/api/"):
+            if not dash_config.dev_mode and dash_config.auth_required and api_key:
+                key = request.headers.get("X-API-Key")
+                if key != api_key:
+                    return JSONResponse(
+                        status_code=401,
+                        content={"error": "Invalid or missing X-API-Key header"},
+                    )
+        return await call_next(request)
+
+    # Rate limiting
+    if dash_config.rate_limit_enabled:
+        app.add_middleware(
+            RateLimitMiddleware,
+            general_rpm=dash_config.rate_limit_rpm,
+            expensive_rpm=dash_config.rate_limit_expensive_rpm,
+        )
     if engine is None:
-        engine = get_engine() or HarnessEngine(config or HarnessConfig.default())
+        engine = get_engine() or HarnessEngine(_app_config or HarnessConfig.default())
         if engine not in _global_engines.values():
             register_engine("default", engine)
     bridge = DashboardBridge(engine)
@@ -259,9 +310,22 @@ def create_app(config: HarnessConfig | None = None, engine: HarnessEngine | None
         if not user_request:
             return {"error": "No request provided"}
 
+        # Create a fresh engine per request to avoid state leakage
+        request_engine = HarnessEngine(_app_config or HarnessConfig.default())
+
         try:
             bridge.record_run()
-            result = await engine.run(user_request)
+            result = await request_engine.run(user_request)
+            # Copy fresh engine's metrics to bridge's engine for dashboard visibility
+            for trace in request_engine.metrics.get_all_traces():
+                engine.metrics.start_trace(trace.trace_id)
+                engine.metrics.end_trace(
+                    trace.trace_id,
+                    success=trace.success,
+                    latency_ms=trace.latency_ms,
+                    tokens=int(trace.tokens_used or 0),
+                    cost=float(trace.cost_usd or 0.0),
+                )
             await broadcast({
                 "type": "execution_complete",
                 "data": {
@@ -410,6 +474,13 @@ def create_app(config: HarnessConfig | None = None, engine: HarnessEngine | None
 
     @app.websocket("/ws")
     async def websocket_endpoint(websocket: WebSocket):
+        # Auth: check token query param
+        if not dash_config.dev_mode and dash_config.auth_required and api_key:
+            token = websocket.query_params.get("token")
+            if token != api_key:
+                await websocket.close(code=4001, reason="Unauthorized")
+                return
+
         await websocket.accept()
         ws_clients.add(websocket)
         logger.info(f"Dashboard client connected ({len(ws_clients)} total)")

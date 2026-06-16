@@ -148,8 +148,5 @@ class LLMProvider:
                 output_cost = (completion_tokens / 1_000_000) * output_price
                 return round(input_cost + output_cost, 6)
 
-        # Default estimate
-        return round(
-            (prompt_tokens / 1_000_000) * 2.50 + (completion_tokens / 1_000_000) * 10.00,
-            6,
-        )
+        # Unknown model — return 0.0 (local/free models have no cost)
+        return 0.0
