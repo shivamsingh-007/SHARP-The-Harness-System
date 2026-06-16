@@ -21,9 +21,26 @@ What these tests do NOT verify:
 
 from __future__ import annotations
 
+import socket
+
 import pytest
 
 from sharp import HarnessEngine, HarnessConfig
+
+
+def _ollama_available() -> bool:
+    """Check if Ollama is reachable on localhost:11434."""
+    try:
+        with socket.create_connection(("localhost", 11434), timeout=2):
+            return True
+    except (ConnectionRefusedError, OSError, TimeoutError):
+        return False
+
+
+ollama_skip = pytest.mark.skipif(
+    not _ollama_available(),
+    reason="Ollama not running on localhost:11434",
+)
 
 
 # ---------------------------------------------------------------------------
@@ -33,6 +50,7 @@ from sharp import HarnessEngine, HarnessConfig
 
 
 @pytest.mark.llm_integration
+@ollama_skip
 class TestApprovalBasics:
     """Approval-style tests: verify the engine produces plausible output."""
 
@@ -90,6 +108,7 @@ class TestApprovalBasics:
 
 
 @pytest.mark.llm_integration
+@ollama_skip
 class TestApprovalToolCalling:
     """Verify tool calling works end-to-end with real LLM."""
 
@@ -125,6 +144,7 @@ class TestApprovalToolCalling:
 
 
 @pytest.mark.llm_integration
+@ollama_skip
 class TestApprovalStateIsolation:
     """Verify sequential calls don't leak state."""
 
@@ -152,6 +172,7 @@ class TestApprovalStateIsolation:
 
 
 @pytest.mark.llm_integration
+@ollama_skip
 class TestApprovalOrchestrator:
     """Approval-style tests for the Orchestrator with real LLM."""
 
@@ -174,9 +195,9 @@ class TestApprovalOrchestrator:
             interface_type="custom_api",
         )
 
-        assert result.output, f"Orchestrator returned empty output: {result}"
-        assert len(result.output) > 0
-        assert result.audit_entry is not None
+        assert isinstance(result, dict), f"Expected dict, got {type(result)}"
+        assert result.get("output"), f"Orchestrator returned empty output: {result}"
+        assert len(result["output"]) > 0
 
     @pytest.mark.asyncio
     async def test_orchestrator_audit_logged(self) -> None:
@@ -186,8 +207,8 @@ class TestApprovalOrchestrator:
             interface_type="custom_api",
         )
 
-        summary = self.orchestrator.audit.get_summary()
-        assert summary["total_entries"] >= 1
+        entries = self.orchestrator.get_audit_log()
+        assert len(entries) >= 1
 
     @pytest.mark.asyncio
     async def test_orchestrator_performance_tracked(self) -> None:
@@ -197,5 +218,5 @@ class TestApprovalOrchestrator:
             interface_type="custom_api",
         )
 
-        snapshot = self.orchestrator.performance.get_snapshot()
+        snapshot = self.orchestrator.get_performance()
         assert snapshot["total_responses"] >= 1

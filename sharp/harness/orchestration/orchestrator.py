@@ -76,16 +76,24 @@ class Orchestrator:
         self,
         raw_request: dict[str, Any],
         interface: InterfaceType = InterfaceType.CUSTOM_API,
+        interface_type: str | InterfaceType | None = None,
+        **kwargs: Any,
     ) -> dict[str, Any]:
         """Main entry point: handle a request from any AI interface.
 
         Args:
             raw_request: Raw request dict from the interface.
             interface: Which interface the request came from.
+            interface_type: Backward-compat alias for `interface`.
 
         Returns:
             Normalized response dict for the originating interface.
         """
+        if interface_type is not None:
+            if isinstance(interface_type, str):
+                interface = InterfaceType(interface_type)
+            else:
+                interface = interface_type
         trace_id = str(uuid.uuid4())[:12]
         adapter = self.get_adapter(interface)
 
