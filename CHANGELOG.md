@@ -37,3 +37,15 @@
 - Benchmark harness with reproducible runs, baseline comparison, labeled results
 - Pytest timing plugin writing per-test duration to `test-results.json`
 - Test count: 493 → 603
+
+### Documentation restructured
+- README rewritten from 488 to ~100 lines (install → quickstart → links)
+- Public API facade: `from sharp.harness import Harness, HarnessConfig`
+- `docs/QUICKSTART.md`: <5 min path with GitHub Models as canonical provider
+- `docs/CANONICAL_EXAMPLES.md`: two blessed patterns (scripted + HTTP API)
+- `docs/CONFIG_CONTRACT.md`: all ~40 config fields, defaults, stability, env vars
+- `docs/EXTENDING.md`: 6 extension points with examples and contracts
+- `docs/ARCHITECTURE.md`: runtime flow, state boundaries, key modules
+- `examples/minimal.py`: runnable 20-line example
+- Stale claims fixed in LIMITATIONS.md and PRODUCT_CONTRACT.md
+- Deleted superseded docs: examples.md, engine.md, tools.md

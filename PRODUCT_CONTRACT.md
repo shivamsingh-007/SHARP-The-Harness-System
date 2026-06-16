@@ -46,7 +46,7 @@
 | Prompt composition | Stable | System prompt + tools + context assembly |
 | Rule-based validation | Stable | Empty check, length check, hallucination markers |
 | Unit tests | Stable | 603 tests, well-organized, mocked LLM |
-| LLM integration | Experimental | Requires Ollama, 11 approval-style tests |
+| LLM integration | Experimental | Requires GITHUB_TOKEN, 10 integration tests |
 | Orchestrator | Experimental | Routes across interfaces, creates engine per request |
 | Coding agent | Experimental | DPEVR loop, async path has known issues |
 | LLM judge | Experimental | Auto-fails on evaluation failure (fail-closed); fragile JSON parsing |
