@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.2.1] - 2026-06-16
+
+This release completes a documentation integrity pass across the public API, quickstart, architecture map, config contract, and extension guide. All verification checks passed, including internal link validation, import-path consistency, config-field alignment, and hook metadata matching the codebase.
+
+### Compatibility guarantees
+
+- `from sharp.harness import Harness, HarnessConfig` is the preferred public import path.
+- Backward compatibility is preserved for `from sharp import HarnessEngine`.
+- Config contract tables now match the implementation exactly.
+- Hook names, data keys, risk levels, and validation levels are aligned with code.
+- Deleted or superseded documentation has been removed, with only the changelog retaining the migration history.
+
+### Fixed
+
+- Renamed the quickstart document to avoid lowercase-link issues on Linux.
+- Corrected an import reference in the extension guide.
+- Updated the config contract transport value to match implementation.
+- Expanded the architecture map to cover all 15 modules.
+
+### Verified
+
+- All public imports resolve correctly.
+- All docs and examples use the canonical import path.
+- Internal markdown links pass validation.
+- No stale references remain to deleted documentation.
+
 ## [0.2.0] - 2026-06-16
 
 ### Security hardening completed
