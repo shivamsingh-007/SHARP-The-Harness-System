@@ -8,7 +8,7 @@ A general-purpose orchestration framework for LLM tools and agents with context 
 
 **A proof of concept with real code.** Not production-ready. See [PRODUCT_CONTRACT.md](PRODUCT_CONTRACT.md) for what this project promises and what it doesn't.
 
-**Security:** Designed for localhost development. Not production-hardened — CORS allows all origins, subprocess calls use `shell=True`, no auth on API endpoints.
+**Security:** Designed for localhost development. Not production-hardened — API key auth is basic (single key, no rotation), rate limiting is per-process (fragments under multiple workers), no database persistence.
 
 ---
 
@@ -383,7 +383,7 @@ pytest tests/ --cov=sharp --cov-report=term-missing
 ```
 
 **Note:** 493 unit tests use mocked LLM responses and verify **plumbing, not intelligence** — they prove components connect and control flow works correctly.
-11 LLM integration tests (`test_llm_integration.py`) use GitHub Models API with `gpt-4o-mini` and verify **shape and coarse correctness** of real LLM output.
+10 LLM integration tests (`test_llm_integration.py`) use GitHub Models API with `gpt-4o-mini` and verify **shape and coarse correctness** of real LLM output.
 CI runs only the mocked tests by default.
 
 ```

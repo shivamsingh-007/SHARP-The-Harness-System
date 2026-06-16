@@ -18,7 +18,7 @@
 
 ## What SHARP Does Not Do
 
-- Not production-ready: no auth, no database persistence, no streaming, no rate limiting
+- Not production-ready: no database persistence, no streaming, API key auth is basic (single key, no rotation)
 - Not a multi-tenant platform: state is in-memory, no request isolation by default
 - Not a code generation IDE: the coding agent orchestrates features and tests, not full implementations
 - Not a deployment tool: no CI/CD integration, no container management
