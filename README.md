@@ -6,7 +6,7 @@
 
 Context engineering, prompt composition, tool execution, validation, and retry — orchestrated as a single pipeline.
 
-*Not production-ready. Honest about what it is and isn't.*
+
 
 [![Python 3.11+](https://img.shields.io/badge/Python-3.11+-3776AB?style=flat-square&logo=python&logoColor=white)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-00FF00?style=flat-square)](https://opensource.org/licenses/MIT)
