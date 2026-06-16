@@ -175,7 +175,19 @@ class DashboardConfig(BaseModel):
 
 
 class HarnessConfig(BaseModel):
-    """Top-level harness configuration."""
+    """Top-level harness configuration.
+
+    Composes sub-configs for LLM, context, prompt, tools, validation,
+    safety, state, observability, execution, MCP, and dashboard.
+
+    Use factory methods for quick setup:
+        HarnessConfig.default()          — OpenAI gpt-4o
+        HarnessConfig.ollama()           — local Ollama
+        HarnessConfig.github_models()    — GitHub Models API
+        HarnessConfig.from_yaml(path)    — YAML file with ${VAR} expansion
+
+    Precedence: explicit Python args > env vars > YAML values > defaults.
+    """
 
     llm: LLMConfig = Field(default_factory=LLMConfig)
     context: ContextConfig = Field(default_factory=ContextConfig)

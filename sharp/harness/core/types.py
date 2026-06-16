@@ -99,7 +99,21 @@ class ContextSource(BaseModel):
 
 
 class HarnessResult(BaseModel):
-    """Final result from the harness engine."""
+    """Final result from the harness engine.
+
+    Returned by HarnessEngine.run(). Fields are stable across v0.x releases.
+
+    Attributes:
+        success: Whether the pipeline completed without fatal error.
+        output: The final text output from the LLM or tool.
+        attempts: Number of execution attempts (1 = no retries).
+        total_latency_ms: Wall-clock time for the full pipeline.
+        total_cost_usd: Estimated cost in USD (0.0 for local models).
+        total_tokens: Total tokens consumed (prompt + completion).
+        validation_score: Score from the validation zone (0.0–1.0).
+        error: Error message if success is False, else None.
+        trace_id: Unique identifier for this execution trace.
+    """
 
     success: bool
     output: str
